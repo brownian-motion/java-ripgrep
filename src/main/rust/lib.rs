@@ -39,6 +39,7 @@ pub extern "C" fn search_file(
     };
 }
 
+// Defines the various types and enums used by this wrapper library
 mod types {
     use grep::searcher::{Searcher, Sink, SinkError, SinkMatch};
     use std::fmt;
@@ -98,6 +99,11 @@ mod types {
                 // -1 is a common value to use in Java when an int value is not found
                 line_number: matched.line_number().map(|n| n as c_int).unwrap_or(-1),
                 // lifetime should be good because the callback will finish before the buffer is modified.
+                // callbacks just need to avoid SAVING the byte array passed to it, and should copy from it instead
+                // This is easier than allocating a CString and passing it with a nul-terminator,
+                // because this way we don't have to free() anything with another FFI call.
+                // The drawback is a bit more work on the Java side using this data,
+                // and the risk of retaining a dangling pointer to this buffer.
                 bytes: matched.bytes().as_ptr(),
                 num_bytes: matched.bytes().len() as c_int,
             };
@@ -113,6 +119,7 @@ mod types {
     }
 }
 
+// Handles parsing parameters passed to the library
 mod parse {
     use grep::regex::RegexMatcher;
 
@@ -122,6 +129,7 @@ mod parse {
 
     use crate::types::*;
 
+    // Either opens the file with the given name, or returns an error code to pass out of the library
     pub fn open_filename(filename: Option<*const c_char>) -> Result<File, SearchStatusCode> {
         use SearchStatusCode::*;
 
@@ -142,6 +150,8 @@ mod parse {
         }
     }
 
+    // Either generates a regular-expression matcher from the given C-style string,
+    // or returns an error code to pass out of the library
     pub fn parse_search_text(
         search_text: Option<*const c_char>,
     ) -> Result<RegexMatcher, SearchStatusCode> {
@@ -161,6 +171,41 @@ mod parse {
         match RegexMatcher::new(search_text) {
             Ok(regex) => Ok(regex),
             Err(_) => return Err(ErrorBadPattern),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::ffi::CString;
+
+        #[test]
+        fn test_opening_bee_movie_script() {
+            let filename = CString::new("bee_movie.txt").unwrap();
+            let file = open_filename(Some(filename.as_ptr()));
+            assert!(
+                file.is_ok(),
+                "Could not open test resource \"bee_movie.txt\" using a C-style pointer"
+            );
+        }
+
+        #[test]
+        fn test_opening_nonexistant_file_returns_appropriate_error_code() {
+            let filename = CString::new("non_existant_file.txt").unwrap();
+            assert_eq!(
+                SearchStatusCode::ErrorCouldNotOpenFile,
+                open_filename(Some(filename.as_ptr()))
+                    .expect_err("Should not have been able to open missing file")
+            );
+        }
+
+        #[test]
+        fn test_opening_null_filename_returns_appropriate_error_code() {
+            assert_eq!(
+                SearchStatusCode::MissingFilename,
+                open_filename(None)
+                    .expect_err("Should not have been able to open a file with a null filename")
+            );
         }
     }
 }

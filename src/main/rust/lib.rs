@@ -2,14 +2,43 @@ extern crate grep;
 use grep::regex::RegexMatcher;
 use grep::searcher::Searcher;
 
+use std::ffi::*;
+use std::fs::File;
 use std::os::raw::c_char;
 
-use std::fs::File;
-
-use std::ffi::*;
-
-use crate::parse::*;
+use parse::*;
 use types::*;
+
+#[no_mangle]
+pub extern "C" fn search_file(
+    // every Java type is nullable, represented here as an Option<*type>
+    filename: Option<*const c_char>,
+    search_text: Option<*const c_char>,
+    result_callback: Option<SearchResultCallbackFn>,
+) -> SearchStatusCode {
+    use SearchStatusCode::*;
+
+    let file: File = match open_filename(filename) {
+        Ok(filename) => filename,
+        Err(code) => return code,
+    };
+
+    let matcher: RegexMatcher = match parse_search_text(search_text) {
+        Ok(matcher) => matcher,
+        Err(code) => return code,
+    };
+
+    // the Sink type accepts search results from ripgrep
+    let sink = match result_callback {
+        Some(callback) => SearchResultCallbackSink(callback),
+        None => return MissingCallback,
+    };
+
+    match Searcher::new().search_file(&matcher, &file, sink) {
+        Ok(_) => return Success,
+        Err(_) => return ErrorFromCallback,
+    };
+}
 
 mod types {
     use grep::searcher::{Searcher, Sink, SinkError, SinkMatch};
@@ -135,37 +164,6 @@ mod parse {
             Err(_) => return Err(ErrorBadPattern),
         }
     }
-}
-
-#[no_mangle]
-pub extern "C" fn search_file(
-    // every Java type is nullable, represented here as an Option<*type>
-    filename: Option<*const c_char>,
-    search_text: Option<*const c_char>,
-    result_callback: Option<SearchResultCallbackFn>,
-) -> SearchStatusCode {
-    use SearchStatusCode::*;
-
-    let file: File = match open_filename(filename) {
-        Ok(filename) => filename,
-        Err(code) => return code,
-    };
-
-    let matcher: RegexMatcher = match parse_search_text(search_text) {
-        Ok(matcher) => matcher,
-        Err(code) => return code,
-    };
-
-    // Accepts search results from ripgrep
-    let sink = match result_callback {
-        Some(callback) => SearchResultCallbackSink(callback),
-        None => return MissingCallback,
-    };
-
-    return match Searcher::new().search_file(&matcher, &file, sink) {
-        Ok(_) => Success,
-        Err(_) => ErrorFromCallback,
-    };
 }
 
 #[cfg(test)]

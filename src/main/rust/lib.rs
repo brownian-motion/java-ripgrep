@@ -2,7 +2,6 @@ extern crate grep;
 use grep::regex::RegexMatcher;
 use grep::searcher::Searcher;
 
-use std::ffi::*;
 use std::fs::File;
 use std::os::raw::c_char;
 
@@ -169,6 +168,7 @@ mod parse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::*;
 
     #[test]
     fn test_search_for_bees_without_error() {

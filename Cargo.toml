@@ -14,3 +14,7 @@ grep = "0.2"
 [lib]
 crate-type = ['dylib']
 path = 'src/main/rust/lib.rs'
+
+[[bin]]
+name = 'find_bees'
+path = 'src/main/rust/main.rs'

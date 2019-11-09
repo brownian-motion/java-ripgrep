@@ -1,121 +1,139 @@
 extern crate grep;
 use grep::regex::RegexMatcher;
-
-use grep::searcher::{Searcher, Sink, SinkError, SinkMatch};
+use grep::searcher::Searcher;
 
 use std::os::raw::c_char;
-use std::os::raw::c_int;
 
-use std::fmt;
 use std::fs::File;
 
 use std::ffi::*;
 
-// For use returning back through the FFI.
-// Note that the bytes inside are NOT nul-terminated!
-#[repr(C)]
-pub struct SearchResult {
-    pub line_number: c_int,
-    pub bytes: *const u8, // NOT nul-terminated!
-    pub num_bytes: c_int,
-}
+use crate::parse::*;
+use types::*;
 
-#[repr(C)]
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-pub enum SearchStatusCode {
-    Success = 0,
-    // Equivalents to IllegalArgumentExceptions:
-    MissingFilename = 1,
-    MissingSearchText = 2,
-    MissingCallback = 3,
-    // Failure from inside ripgrep:
-    ErrorBadPattern = 11,
-    ErrorCouldNotOpenFile = 12,
-    ErrorFromRipgrep = 13,
-    // Failure from inside the callback:
-    ErrorFromCallback = 21,
-}
+mod types {
+    use grep::searcher::{Searcher, Sink, SinkError, SinkMatch};
+    use std::fmt;
+    use std::os::raw::c_int;
 
-// indicates Success on true, Failure on false
-type SearchResultCallbackFn = extern "C" fn(SearchResult) -> bool;
+    // For use returning back through the FFI.
+    // Note that the bytes inside are NOT nul-terminated!
+    #[repr(C)]
+    pub struct SearchResult {
+        pub line_number: c_int,
+        pub bytes: *const u8, // NOT nul-terminated!
+        pub num_bytes: c_int,
+    }
 
-struct SearchResultCallbackSink(SearchResultCallbackFn);
+    #[repr(C)]
+    #[derive(Debug, Eq, PartialEq, Clone, Copy)]
+    pub enum SearchStatusCode {
+        Success = 0,
+        // Equivalents to IllegalArgumentExceptions:
+        MissingFilename = 1,
+        MissingSearchText = 2,
+        MissingCallback = 3,
+        // Failure from inside ripgrep:
+        ErrorBadPattern = 11,
+        ErrorCouldNotOpenFile = 12,
+        ErrorFromRipgrep = 13,
+        // Failure from inside the callback:
+        ErrorFromCallback = 21,
+    }
 
-struct CallbackError {
-    error_message: String,
-}
+    // indicates Success on true, Failure on false
+    pub type SearchResultCallbackFn = extern "C" fn(SearchResult) -> bool;
 
-impl SinkError for CallbackError {
-    fn error_message<T: fmt::Display>(message: T) -> Self {
-        Self {
-            error_message: format!("{}", message),
+    pub struct SearchResultCallbackSink(pub SearchResultCallbackFn);
+
+    pub struct CallbackError {
+        error_message: String,
+    }
+
+    impl SinkError for CallbackError {
+        fn error_message<T: fmt::Display>(message: T) -> Self {
+            Self {
+                error_message: format!("{}", message),
+            }
+        }
+    }
+
+    impl Sink for SearchResultCallbackSink {
+        type Error = CallbackError;
+
+        fn matched(
+            &mut self,
+            _searcher: &Searcher,
+            matched: &SinkMatch,
+        ) -> Result<bool, CallbackError> {
+            let result = SearchResult {
+                // -1 is a common value to use in Java when an int value is not found
+                line_number: matched.line_number().map(|n| n as c_int).unwrap_or(-1),
+                // lifetime should be good because the callback will finish before the buffer is modified.
+                bytes: matched.bytes().as_ptr(),
+                num_bytes: matched.bytes().len() as c_int,
+            };
+            let succeeded: bool = (self.0)(result);
+            if succeeded {
+                Ok(true) // callback done, keep searching
+            } else {
+                Err(CallbackError::error_message(
+                    "Callback completed but indicated an error",
+                ))
+            }
         }
     }
 }
 
-impl Sink for SearchResultCallbackSink {
-    type Error = CallbackError;
+mod parse {
+    use grep::regex::RegexMatcher;
 
-    fn matched(
-        &mut self,
-        _searcher: &Searcher,
-        matched: &SinkMatch,
-    ) -> Result<bool, CallbackError> {
-        let result = SearchResult {
-            // -1 is a common value to use in Java when an int value is not found
-            line_number: matched.line_number().map(|n| n as c_int).unwrap_or(-1),
-            // lifetime should be good because the callback will finish before the buffer is modified.
-            bytes: matched.bytes().as_ptr(),
-            num_bytes: matched.bytes().len() as c_int,
+    use std::ffi::CStr;
+    use std::fs::File;
+    use std::os::raw::c_char;
+
+    use crate::types::*;
+
+    pub fn open_filename(filename: Option<*const c_char>) -> Result<File, SearchStatusCode> {
+        use SearchStatusCode::*;
+
+        // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
+        let filename: &CStr = match filename {
+            None => return Err(MissingFilename),
+            Some(filename_ptr) => unsafe { CStr::from_ptr(filename_ptr) },
         };
-        let succeeded: bool = (self.0)(result);
-        if succeeded {
-            Ok(true) // callback done, keep searching
-        } else {
-            Err(CallbackError::error_message(
-                "Callback completed but indicated an error",
-            ))
+
+        let filename: &str = match filename.to_str() {
+            Ok(filename) => filename,
+            Err(_) => return Err(ErrorCouldNotOpenFile),
+        };
+
+        match File::open(filename) {
+            Ok(file) => Ok(file),
+            Err(_) => Err(ErrorCouldNotOpenFile),
         }
     }
-}
 
-fn open_filename(filename: Option<*const c_char>) -> Result<File, SearchStatusCode> {
-    use SearchStatusCode::*;
+    pub fn parse_search_text(
+        search_text: Option<*const c_char>,
+    ) -> Result<RegexMatcher, SearchStatusCode> {
+        use SearchStatusCode::*;
 
-    // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
-    let filename: &CStr = match filename {
-        None => return Err(MissingFilename),
-        Some(filename_ptr) => unsafe { CStr::from_ptr(filename_ptr) },
-    };
+        // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
+        let search_text: &CStr = match search_text {
+            None => return Err(MissingSearchText),
+            Some(search_text_ptr) => unsafe { CStr::from_ptr(search_text_ptr) },
+        };
 
-    let filename: &str = match filename.to_str() {
-        Ok(filename) => filename,
-        Err(_) => return Err(ErrorCouldNotOpenFile),
-    };
+        let search_text: &str = match search_text.to_str() {
+            Ok(search_text) => search_text,
+            Err(_) => return Err(ErrorBadPattern),
+        };
 
-    match File::open(filename) {
-        Ok(file) => Ok(file),
-        Err(_) => Err(ErrorCouldNotOpenFile),
-    }
-}
-
-fn parse_search_text(search_text: Option<*const c_char>) -> Result<RegexMatcher, SearchStatusCode> {
-    use SearchStatusCode::*;
-
-    // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
-    let search_text: &CStr = match search_text {
-        None => return Err(MissingSearchText),
-        Some(search_text_ptr) => unsafe { CStr::from_ptr(search_text_ptr) },
-    };
-
-    let search_text: &str = match search_text.to_str() {
-        Ok(search_text) => search_text,
-        Err(_) => return Err(ErrorBadPattern),
-    };
-
-    match RegexMatcher::new(search_text) {
-        Ok(regex) => Ok(regex),
-        Err(_) => return Err(ErrorBadPattern),
+        match RegexMatcher::new(search_text) {
+            Ok(regex) => Ok(regex),
+            Err(_) => return Err(ErrorBadPattern),
+        }
     }
 }
 
@@ -153,7 +171,6 @@ pub extern "C" fn search_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
     #[test]
     fn test_search_for_bees_without_error() {
@@ -170,7 +187,7 @@ mod tests {
         );
 
         assert_eq!(SearchStatusCode::Success, result_code,
-        	"When the callback returns true to indicate success, the extern search_file function should always return {:?}", SearchStatusCode::Success);
+            "When the callback returns true to indicate success, the extern search_file function should always return {:?}", SearchStatusCode::Success);
     }
 
     #[test]
@@ -188,7 +205,7 @@ mod tests {
         );
 
         assert_eq!(SearchStatusCode::ErrorFromCallback, result_code,
-        	"When the callback returns false to indicate an error, the extern search_file function should always return {:?}", SearchStatusCode::ErrorFromCallback);
+            "When the callback returns false to indicate an error, the extern search_file function should always return {:?}", SearchStatusCode::ErrorFromCallback);
     }
 
     #[test]
@@ -206,7 +223,7 @@ mod tests {
         );
 
         assert_eq!(SearchStatusCode::ErrorCouldNotOpenFile, result_code,
-        	"When passing the name of a file that does not exist, the extern search_file function should always return {:?}", SearchStatusCode::ErrorCouldNotOpenFile);
+            "When passing the name of a file that does not exist, the extern search_file function should always return {:?}", SearchStatusCode::ErrorCouldNotOpenFile);
     }
 
     #[test]
@@ -218,7 +235,7 @@ mod tests {
         let result_code = search_file(None, Some(search_pattern.as_ptr()), Some(callback));
 
         assert_eq!(SearchStatusCode::MissingFilename, result_code,
-        	"When passing a null filename, the extern search_file function should always return {:?}", SearchStatusCode::MissingFilename);
+            "When passing a null filename, the extern search_file function should always return {:?}", SearchStatusCode::MissingFilename);
     }
 
     #[test]
@@ -230,7 +247,7 @@ mod tests {
         let result_code = search_file(Some(filename.as_ptr()), None, Some(callback));
 
         assert_eq!(SearchStatusCode::MissingSearchText, result_code,
-        	"When passing null search text, the extern search_file function should always return {:?}", SearchStatusCode::MissingSearchText);
+            "When passing null search text, the extern search_file function should always return {:?}", SearchStatusCode::MissingSearchText);
     }
 
     #[test]
@@ -243,7 +260,7 @@ mod tests {
         let result_code = search_file(Some(filename.as_ptr()), Some(search_pattern.as_ptr()), None);
 
         assert_eq!(SearchStatusCode::MissingCallback, result_code,
-        	"When passing a null callback, the extern search_file function should always return {:?}", SearchStatusCode::MissingCallback);
+            "When passing a null callback, the extern search_file function should always return {:?}", SearchStatusCode::MissingCallback);
     }
 
     #[test]
@@ -252,13 +269,15 @@ mod tests {
         let search_text = CString::new("graduation").unwrap(); // only on line 13
         let callback: SearchResultCallbackFn = match_graduation_on_line_13_callback;
 
+        // testing inherently unsafe code, this is fine (without locks) if this test is only run once each execution
+        unsafe { NUM_GRADUATIONS = 0 };
         let result_code = search_file(
             Some(filename.as_ptr()),
             Some(search_text.as_ptr()),
             Some(callback),
         );
         assert_eq!(SearchStatusCode::Success, result_code,
-        	"There is one match for \"graduation\" in the Bee Movie script, so a search for that literal should yield a successful result");
+            "There is one match for \"graduation\" in the Bee Movie script, so a search for that literal should yield a successful result");
         assert_eq!(
             1,
             // testing inherently unsafe code, this is fine if this test is only run once each execution
@@ -287,5 +306,5 @@ mod tests {
     }
 
     //testing inherently unsafe code, this is fine if this test is only run once each execution
-    static mut NUM_GRADUATIONS: u32 = 0; // consider using a mutex?
+    static mut NUM_GRADUATIONS: u32 = 0; // consider using a mutex to guarantee this is not run concurrently?
 }

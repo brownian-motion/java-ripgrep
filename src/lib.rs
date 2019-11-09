@@ -14,15 +14,15 @@ use std::ffi::*;
 // For use returning back through the FFI.
 // Note that the bytes inside are NOT nul-terminated!
 #[repr(C)]
-struct SearchResult {
-    line_number: c_int,
-    bytes: *const u8,
-    num_bytes: c_int,
+pub struct SearchResult {
+    pub line_number: c_int,
+    pub bytes: *const u8, // NOT nul-terminated!
+    pub num_bytes: c_int,
 }
 
 #[repr(C)]
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
-enum SearchStatusCode {
+pub enum SearchStatusCode {
     Success = 0,
     // Equivalents to IllegalArgumentExceptions:
     MissingFilename = 1,
@@ -37,9 +37,9 @@ enum SearchStatusCode {
 }
 
 // indicates Success on true, Failure on false
-type SearchResultCallback = extern "C" fn(SearchResult) -> bool;
+type SearchResultCallbackFn = extern "C" fn(SearchResult) -> bool;
 
-struct SearchResultCallbackSink(SearchResultCallback);
+struct SearchResultCallbackSink(SearchResultCallbackFn);
 
 struct CallbackError {
     error_message: String,
@@ -120,11 +120,11 @@ fn parse_search_text(search_text: Option<*const c_char>) -> Result<RegexMatcher,
 }
 
 #[no_mangle]
-extern "C" fn search_file(
+pub extern "C" fn search_file(
     // every Java type is nullable, represented here as an Option<*type>
     filename: Option<*const c_char>,
     search_text: Option<*const c_char>,
-    result_callback: Option<SearchResultCallback>,
+    result_callback: Option<SearchResultCallbackFn>,
 ) -> SearchStatusCode {
     use SearchStatusCode::*;
 
@@ -138,20 +138,22 @@ extern "C" fn search_file(
         Err(code) => return code,
     };
 
+    // Accepts search results from ripgrep
     let sink = match result_callback {
         Some(callback) => SearchResultCallbackSink(callback),
         None => return MissingCallback,
     };
 
-    match Searcher::new().search_file(&matcher, &file, sink) {
+    return match Searcher::new().search_file(&matcher, &file, sink) {
         Ok(_) => Success,
         Err(_) => ErrorFromCallback,
-    }
+    };
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
 
     #[test]
     fn test_search_for_bees_without_error() {
@@ -195,7 +197,7 @@ mod tests {
             .expect("Could not represent \"non_existant_file.txt\" as a CString");
         let search_pattern =
             CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
-        let callback = always_failing_callback;
+        let callback = always_succeeding_callback;
 
         let result_code = search_file(
             Some(filename.as_ptr()),
@@ -207,6 +209,64 @@ mod tests {
         	"When passing the name of a file that does not exist, the extern search_file function should always return {:?}", SearchStatusCode::ErrorCouldNotOpenFile);
     }
 
+    #[test]
+    fn test_search_using_null_filename_returns_missing_filename_error_code() {
+        let search_pattern =
+            CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
+        let callback = always_succeeding_callback;
+
+        let result_code = search_file(None, Some(search_pattern.as_ptr()), Some(callback));
+
+        assert_eq!(SearchStatusCode::MissingFilename, result_code,
+        	"When passing a null filename, the extern search_file function should always return {:?}", SearchStatusCode::MissingFilename);
+    }
+
+    #[test]
+    fn test_search_for_null_search_text_returns_missing_search_text_error_code() {
+        let filename = CString::new("bee_movie.txt")
+            .expect("Could not represent \"bee_movie.txt\" as a CString");
+        let callback = always_succeeding_callback;
+
+        let result_code = search_file(Some(filename.as_ptr()), None, Some(callback));
+
+        assert_eq!(SearchStatusCode::MissingSearchText, result_code,
+        	"When passing null search text, the extern search_file function should always return {:?}", SearchStatusCode::MissingSearchText);
+    }
+
+    #[test]
+    fn test_search_with_null_callback_returns_missing_callback_error_code() {
+        let filename = CString::new("bee_movie.txt")
+            .expect("Could not represent \"bee_movie.txt\" as a CString");
+        let search_pattern =
+            CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
+
+        let result_code = search_file(Some(filename.as_ptr()), Some(search_pattern.as_ptr()), None);
+
+        assert_eq!(SearchStatusCode::MissingCallback, result_code,
+        	"When passing a null callback, the extern search_file function should always return {:?}", SearchStatusCode::MissingCallback);
+    }
+
+    #[test]
+    fn test_calling_callback_single_element() {
+        let filename = CString::new("bee_movie.txt").unwrap();
+        let search_text = CString::new("graduation").unwrap(); // only on line 13
+        let callback: SearchResultCallbackFn = match_graduation_on_line_13_callback;
+
+        let result_code = search_file(
+            Some(filename.as_ptr()),
+            Some(search_text.as_ptr()),
+            Some(callback),
+        );
+        assert_eq!(SearchStatusCode::Success, result_code,
+        	"There is one match for \"graduation\" in the Bee Movie script, so a search for that literal should yield a successful result");
+        assert_eq!(
+            1,
+            // testing inherently unsafe code, this is fine if this test is only run once each execution
+            unsafe { NUM_GRADUATIONS },
+            "The search function indicated success, but didn't actually call the callback."
+        );
+    }
+
     extern "C" fn always_succeeding_callback(_: SearchResult) -> bool {
         true
     }
@@ -214,4 +274,18 @@ mod tests {
     extern "C" fn always_failing_callback(_: SearchResult) -> bool {
         false
     }
+
+    extern "C" fn match_graduation_on_line_13_callback(result: SearchResult) -> bool {
+        assert_eq!(13, result.line_number);
+        let bytes = unsafe { std::slice::from_raw_parts(result.bytes, result.num_bytes as usize) };
+        let text = std::str::from_utf8(bytes)
+            .expect("The bytes passed to the result callback were not a valid UTF-8 string");
+        assert!(text.contains("graduation"));
+        // testing inherently unsafe code, this is fine if this test is only run once each execution
+        unsafe { NUM_GRADUATIONS += 1 };
+        true
+    }
+
+    //testing inherently unsafe code, this is fine if this test is only run once each execution
+    static mut NUM_GRADUATIONS: u32 = 0; // consider using a mutex?
 }

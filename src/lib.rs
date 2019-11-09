@@ -1,6 +1,6 @@
 extern crate grep;
 use grep::regex::RegexMatcher;
-use grep::searcher::sinks::UTF8;
+
 use grep::searcher::{Searcher, Sink, SinkError, SinkMatch};
 
 use std::os::raw::c_char;
@@ -8,30 +8,8 @@ use std::os::raw::c_int;
 
 use std::fmt;
 use std::fs::File;
-use std::io;
 
 use std::ffi::*;
-
-fn main() {
-    search_for_bees(io::stdout()).unwrap();
-}
-
-fn search_for_bees<W: io::Write>(mut out: W) -> Result<(), io::Error> {
-    let sink = UTF8(|line: u64, text: &str| {
-        writeln!(out, "Match at line {}: {}", line, text)?;
-        Ok(true)
-    });
-
-    // finds every "bee" in Bee Movie
-    let matcher = RegexMatcher::new("[Bb]ee").expect("Could not form bee-matching RegexMatcher");
-
-    let subject = File::open("bee_movie.txt")
-        .expect("Could not open the entire script of Bee Movie in bee_movie.txt");
-
-    Searcher::new().search_file(&matcher, &subject, sink)?;
-
-    Ok(())
-}
 
 // For use returning back through the FFI.
 // Note that the bytes inside are NOT nul-terminated!
@@ -101,6 +79,46 @@ impl Sink for SearchResultCallbackSink {
     }
 }
 
+fn open_filename(filename: Option<*const c_char>) -> Result<File, SearchStatusCode> {
+    use SearchStatusCode::*;
+
+    // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
+    let filename: &CStr = match filename {
+        None => return Err(MissingFilename),
+        Some(filename_ptr) => unsafe { CStr::from_ptr(filename_ptr) },
+    };
+
+    let filename: &str = match filename.to_str() {
+        Ok(filename) => filename,
+        Err(_) => return Err(ErrorCouldNotOpenFile),
+    };
+
+    match File::open(filename) {
+        Ok(file) => Ok(file),
+        Err(_) => Err(ErrorCouldNotOpenFile),
+    }
+}
+
+fn parse_search_text(search_text: Option<*const c_char>) -> Result<RegexMatcher, SearchStatusCode> {
+    use SearchStatusCode::*;
+
+    // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
+    let search_text: &CStr = match search_text {
+        None => return Err(MissingSearchText),
+        Some(search_text_ptr) => unsafe { CStr::from_ptr(search_text_ptr) },
+    };
+
+    let search_text: &str = match search_text.to_str() {
+        Ok(search_text) => search_text,
+        Err(_) => return Err(ErrorBadPattern),
+    };
+
+    match RegexMatcher::new(search_text) {
+        Ok(regex) => Ok(regex),
+        Err(_) => return Err(ErrorBadPattern),
+    }
+}
+
 #[no_mangle]
 extern "C" fn search_file(
     // every Java type is nullable, represented here as an Option<*type>
@@ -110,44 +128,20 @@ extern "C" fn search_file(
 ) -> SearchStatusCode {
     use SearchStatusCode::*;
 
-    // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
-    let filename: &CStr = match filename {
-        None => return MissingFilename,
-        Some(filename_ptr) => unsafe { CStr::from_ptr(filename_ptr) },
-    };
-
-    let filename: &str = match filename.to_str() {
+    let file: File = match open_filename(filename) {
         Ok(filename) => filename,
-        Err(_) => return ErrorCouldNotOpenFile,
+        Err(code) => return code,
     };
 
-    let file: File = match File::open(filename) {
-        Ok(file) => file,
-        Err(_) => return ErrorCouldNotOpenFile,
+    let matcher: RegexMatcher = match parse_search_text(search_text) {
+        Ok(matcher) => matcher,
+        Err(code) => return code,
     };
 
-    // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
-    let search_text: &CStr = match search_text {
-        None => return MissingSearchText,
-        Some(search_text_ptr) => unsafe { CStr::from_ptr(search_text_ptr) },
-    };
-
-    let search_text: &str = match search_text.to_str() {
-        Ok(search_text) => search_text,
-        Err(_) => return ErrorBadPattern,
-    };
-
-    let matcher = match RegexMatcher::new(search_text) {
-        Ok(regex) => regex,
-        Err(_) => return ErrorBadPattern,
-    };
-
-    let result_callback: SearchResultCallback = match result_callback {
-        Some(callback) => callback,
+    let sink = match result_callback {
+        Some(callback) => SearchResultCallbackSink(callback),
         None => return MissingCallback,
     };
-
-    let sink = SearchResultCallbackSink(result_callback);
 
     match Searcher::new().search_file(&matcher, &file, sink) {
         Ok(_) => Success,

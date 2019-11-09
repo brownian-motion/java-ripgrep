@@ -8,3 +8,6 @@ edition = "2018"
 
 [dependencies]
 grep = "0.2"
+
+[lib]
+crate-type = ["cdylib"]

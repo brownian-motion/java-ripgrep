@@ -12,7 +12,7 @@ fn main() {
 
 fn search_for_bees<W: io::Write>(mut out: W) -> Result<(), io::Error> {
     let sink = UTF8(|line: u64, text: &str| {
-        writeln!(out, "Match at {:?}: {:?}", line, text)?;
+        writeln!(out, "Match at line {}: {}", line, text)?;
         Ok(true)
     });
 

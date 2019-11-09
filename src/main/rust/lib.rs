@@ -207,6 +207,25 @@ mod parse {
                     .expect_err("Should not have been able to open a file with a null filename")
             );
         }
+        #[test]
+        fn test_parsing_bee_regex() {
+            let search_text = CString::new("[Bb]ee").unwrap();
+            let file = parse_search_text(Some(search_text.as_ptr()));
+            assert!(
+                file.is_ok(),
+                "Could not parse search text \"[Bb]ee\" using a C-style pointer"
+            );
+        }
+
+        #[test]
+        fn test_opening_null_search_text_returns_appropriate_error_code() {
+            assert_eq!(
+                SearchStatusCode::MissingSearchText,
+                parse_search_text(None).expect_err(
+                    "Should not have been able to parse a search regex from a null string"
+                )
+            );
+        }
     }
 }
 

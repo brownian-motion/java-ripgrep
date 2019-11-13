@@ -1,37 +1,50 @@
 extern crate grep;
 use grep::regex::RegexMatcher;
 use grep::searcher::Searcher;
-
-use std::fs::File;
+use std::io::Write;
 use std::os::raw::c_char;
 
+use std::fs::File;
+use std::io;
+
 use parse::*;
-use types::*;
+pub use types::*;
 
 #[no_mangle]
 pub extern "C" fn search_file(
     // every Java type is nullable, represented here as an Option<*type>
-    filename: Option<*const c_char>,
-    search_text: Option<*const c_char>,
+    filename: *const c_char,
+    search_text: *const c_char,
     result_callback: Option<SearchResultCallbackFn>,
 ) -> SearchStatusCode {
     use SearchStatusCode::*;
 
+    let stdout = io::stdout();
+
+    println!("Reached search_file()");
+    stdout.lock().flush().unwrap();
+
     let file: File = match open_filename(filename) {
-        Ok(filename) => filename,
+        Ok(file) => file,
         Err(code) => return code,
     };
+    println!("Opened file {:?}", file.metadata());
+    stdout.lock().flush().unwrap();
 
     let matcher: RegexMatcher = match parse_search_text(search_text) {
         Ok(matcher) => matcher,
         Err(code) => return code,
     };
+    println!("Created regex matcher {:?}", matcher);
+    stdout.lock().flush().unwrap();
 
     // the Sink type accepts search results from ripgrep
     let sink = match result_callback {
         Some(callback) => SearchResultCallbackSink(callback),
         None => return MissingCallback,
     };
+    println!("Created callback to Java function");
+    stdout.lock().flush().unwrap();
 
     match Searcher::new().search_file(&matcher, &file, sink) {
         Ok(_) => return Success,
@@ -48,6 +61,7 @@ mod types {
     // For use returning back through the FFI.
     // Note that the bytes inside are NOT nul-terminated!
     #[repr(C)]
+    #[no_mangle] // or else JNA can't determine what fields the struct has
     pub struct SearchResult {
         pub line_number: c_int,
         pub bytes: *const u8, // NOT nul-terminated!
@@ -71,7 +85,10 @@ mod types {
     }
 
     // indicates Success on true, Failure on false
+    // #[cfg(not(windows))]
     pub type SearchResultCallbackFn = extern "C" fn(SearchResult) -> bool;
+    // #[cfg(windows)]
+    // pub type SearchResultCallbackFn = extern "stdcall" fn(SearchResult) -> bool;
 
     pub struct SearchResultCallbackSink(pub SearchResultCallbackFn);
 
@@ -107,10 +124,16 @@ mod types {
                 bytes: matched.bytes().as_ptr(),
                 num_bytes: matched.bytes().len() as c_int,
             };
+            eprintln!(
+                "Calling Java callback with match at line {}",
+                result.line_number
+            );
             let succeeded: bool = (self.0)(result);
             if succeeded {
+                eprintln!("Callback succeeded");
                 Ok(true) // callback done, keep searching
             } else {
+                eprintln!("Callback failed");
                 Err(CallbackError::error_message(
                     "Callback completed but indicated an error",
                 ))
@@ -122,27 +145,43 @@ mod types {
 // Handles parsing parameters passed to the library
 mod parse {
     use grep::regex::RegexMatcher;
+    use std::os::raw::c_char;
 
     use std::ffi::CStr;
     use std::fs::File;
-    use std::os::raw::c_char;
+
+    use std::str::{from_utf8, Utf8Error};
 
     use crate::types::*;
 
+    /// Convert a native string to a Rust string
+    fn to_string(pointer: *const c_char) -> Result<String, Utf8Error> {
+        println!("Converting pointer to {:?} to CStr", pointer);
+        let cstr = unsafe { CStr::from_ptr(pointer) };
+        println!("Converting CStr to byte slice");
+        let slice = cstr.to_bytes();
+        println!(
+            "Reading byte slice of size {} as a UTF-8 string",
+            slice.len()
+        );
+        from_utf8(slice).map(|s| s.to_string())
+    }
+
     // Either opens the file with the given name, or returns an error code to pass out of the library
-    pub fn open_filename(filename: Option<*const c_char>) -> Result<File, SearchStatusCode> {
+    pub fn open_filename(filename: *const c_char) -> Result<File, SearchStatusCode> {
         use SearchStatusCode::*;
 
         // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
-        let filename: &CStr = match filename {
-            None => return Err(MissingFilename),
-            Some(filename_ptr) => unsafe { CStr::from_ptr(filename_ptr) },
-        };
+        if filename.is_null() {
+            return Err(MissingFilename);
+        }
 
-        let filename: &str = match filename.to_str() {
+        let filename: String = match to_string(filename) {
             Ok(filename) => filename,
             Err(_) => return Err(ErrorCouldNotOpenFile),
         };
+
+        println!("Parsed filename as {:?}. Opening file...", &filename);
 
         match File::open(filename) {
             Ok(file) => Ok(file),
@@ -152,23 +191,20 @@ mod parse {
 
     // Either generates a regular-expression matcher from the given C-style string,
     // or returns an error code to pass out of the library
-    pub fn parse_search_text(
-        search_text: Option<*const c_char>,
-    ) -> Result<RegexMatcher, SearchStatusCode> {
+    pub fn parse_search_text(search_text: *const c_char) -> Result<RegexMatcher, SearchStatusCode> {
         use SearchStatusCode::*;
 
         // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
-        let search_text: &CStr = match search_text {
-            None => return Err(MissingSearchText),
-            Some(search_text_ptr) => unsafe { CStr::from_ptr(search_text_ptr) },
-        };
+        if search_text.is_null() {
+            return Err(MissingSearchText);
+        }
 
-        let search_text: &str = match search_text.to_str() {
+        let search_text: String = match to_string(search_text) {
             Ok(search_text) => search_text,
             Err(_) => return Err(ErrorBadPattern),
         };
 
-        match RegexMatcher::new(search_text) {
+        match RegexMatcher::new(&search_text) {
             Ok(regex) => Ok(regex),
             Err(_) => return Err(ErrorBadPattern),
         }
@@ -178,11 +214,12 @@ mod parse {
     mod tests {
         use super::*;
         use std::ffi::CString;
+        use std::ptr;
 
         #[test]
         fn test_opening_bee_movie_script() {
             let filename = CString::new("bee_movie.txt").unwrap();
-            let file = open_filename(Some(filename.as_ptr()));
+            let file = open_filename(filename.as_ptr());
             assert!(
                 file.is_ok(),
                 "Could not open test resource \"bee_movie.txt\" using a C-style pointer"
@@ -194,7 +231,7 @@ mod parse {
             let filename = CString::new("non_existant_file.txt").unwrap();
             assert_eq!(
                 SearchStatusCode::ErrorCouldNotOpenFile,
-                open_filename(Some(filename.as_ptr()))
+                open_filename(filename.as_ptr())
                     .expect_err("Should not have been able to open missing file")
             );
         }
@@ -203,14 +240,14 @@ mod parse {
         fn test_opening_null_filename_returns_appropriate_error_code() {
             assert_eq!(
                 SearchStatusCode::MissingFilename,
-                open_filename(None)
+                open_filename(ptr::null())
                     .expect_err("Should not have been able to open a file with a null filename")
             );
         }
         #[test]
         fn test_parsing_bee_regex() {
             let search_text = CString::new("[Bb]ee").unwrap();
-            let file = parse_search_text(Some(search_text.as_ptr()));
+            let file = parse_search_text(search_text.as_ptr());
             assert!(
                 file.is_ok(),
                 "Could not parse search text \"[Bb]ee\" using a C-style pointer"
@@ -221,7 +258,7 @@ mod parse {
         fn test_opening_null_search_text_returns_appropriate_error_code() {
             assert_eq!(
                 SearchStatusCode::MissingSearchText,
-                parse_search_text(None).expect_err(
+                parse_search_text(ptr::null()).expect_err(
                     "Should not have been able to parse a search regex from a null string"
                 )
             );
@@ -233,6 +270,7 @@ mod parse {
 mod tests {
     use super::*;
     use std::ffi::*;
+    use std::ptr;
 
     #[test]
     fn test_search_for_bees_without_error() {
@@ -242,11 +280,7 @@ mod tests {
             CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
         let callback = always_succeeding_callback;
 
-        let result_code = search_file(
-            Some(filename.as_ptr()),
-            Some(search_pattern.as_ptr()),
-            Some(callback),
-        );
+        let result_code = search_file(filename.as_ptr(), search_pattern.as_ptr(), Some(callback));
 
         assert_eq!(SearchStatusCode::Success, result_code,
             "When the callback returns true to indicate success, the extern search_file function should always return {:?}", SearchStatusCode::Success);
@@ -260,11 +294,7 @@ mod tests {
             CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
         let callback = always_failing_callback;
 
-        let result_code = search_file(
-            Some(filename.as_ptr()),
-            Some(search_pattern.as_ptr()),
-            Some(callback),
-        );
+        let result_code = search_file(filename.as_ptr(), search_pattern.as_ptr(), Some(callback));
 
         assert_eq!(SearchStatusCode::ErrorFromCallback, result_code,
             "When the callback returns false to indicate an error, the extern search_file function should always return {:?}", SearchStatusCode::ErrorFromCallback);
@@ -278,11 +308,7 @@ mod tests {
             CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
         let callback = always_succeeding_callback;
 
-        let result_code = search_file(
-            Some(filename.as_ptr()),
-            Some(search_pattern.as_ptr()),
-            Some(callback),
-        );
+        let result_code = search_file(filename.as_ptr(), search_pattern.as_ptr(), Some(callback));
 
         assert_eq!(SearchStatusCode::ErrorCouldNotOpenFile, result_code,
             "When passing the name of a file that does not exist, the extern search_file function should always return {:?}", SearchStatusCode::ErrorCouldNotOpenFile);
@@ -294,7 +320,7 @@ mod tests {
             CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
         let callback = always_succeeding_callback;
 
-        let result_code = search_file(None, Some(search_pattern.as_ptr()), Some(callback));
+        let result_code = search_file(ptr::null(), search_pattern.as_ptr(), Some(callback));
 
         assert_eq!(SearchStatusCode::MissingFilename, result_code,
             "When passing a null filename, the extern search_file function should always return {:?}", SearchStatusCode::MissingFilename);
@@ -306,7 +332,7 @@ mod tests {
             .expect("Could not represent \"bee_movie.txt\" as a CString");
         let callback = always_succeeding_callback;
 
-        let result_code = search_file(Some(filename.as_ptr()), None, Some(callback));
+        let result_code = search_file(filename.as_ptr(), ptr::null(), Some(callback));
 
         assert_eq!(SearchStatusCode::MissingSearchText, result_code,
             "When passing null search text, the extern search_file function should always return {:?}", SearchStatusCode::MissingSearchText);
@@ -319,7 +345,7 @@ mod tests {
         let search_pattern =
             CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
 
-        let result_code = search_file(Some(filename.as_ptr()), Some(search_pattern.as_ptr()), None);
+        let result_code = search_file(filename.as_ptr(), search_pattern.as_ptr(), None);
 
         assert_eq!(SearchStatusCode::MissingCallback, result_code,
             "When passing a null callback, the extern search_file function should always return {:?}", SearchStatusCode::MissingCallback);
@@ -333,11 +359,7 @@ mod tests {
 
         // testing inherently unsafe code, this is fine (without locks) if this test is only run once each execution
         unsafe { NUM_GRADUATIONS = 0 };
-        let result_code = search_file(
-            Some(filename.as_ptr()),
-            Some(search_text.as_ptr()),
-            Some(callback),
-        );
+        let result_code = search_file(filename.as_ptr(), search_text.as_ptr(), Some(callback));
         assert_eq!(SearchStatusCode::Success, result_code,
             "There is one match for \"graduation\" in the Bee Movie script, so a search for that literal should yield a successful result");
         assert_eq!(

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 drrb
+ * Copyright (C) 2015 drrb, paxromana96
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,6 +36,9 @@ import java.util.Locale;
 /**
  * Provides the functionality to compile Rust crates
  * as a maven action.
+ *
+ * Modified from {@code drrb}'s original implementation
+ * to build using {@code cargo} instead of {@code rustc}.
  */
 public class CargoBuild {
 

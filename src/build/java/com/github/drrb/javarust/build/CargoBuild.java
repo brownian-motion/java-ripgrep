@@ -29,9 +29,13 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Provides the functionality to compile Rust crates
@@ -44,25 +48,26 @@ public class CargoBuild {
 
     private static final Date EPOCH = new Date(0);
     private static final Path RUST_OUTPUT_DIR = Paths.get("target", "rust-libs");
+    private static final Set<String> DYLIB_EXTENSIONS = new HashSet<String>(asList(".dylib", ".so", ".dll"));
 
     public static void main(String[] args) throws Exception {
         RUST_OUTPUT_DIR.toFile().mkdirs();
         CargoBuild.compile();
     }
 
-    private static void compile() {
+    private static void compile() throws CargoBuildFailureException {
         System.out.println("Compiling rust crate...");
         try {
             Process process = cargoBuildProcess().inheritIO().start();
             process.waitFor();
             if (process.exitValue() != 0) {
-                throw new RuntimeException(String.format("cargo exited nonzero (status code = %s)", process.exitValue()));
+                throw new CargoBuildFailureException(String.format("cargo exited nonzero (status code = %s)", process.exitValue()));
             }
             for (Path compiledRustLibrary : compiledRustLibraries()) {
                 moveLibIntoClasspath(compiledRustLibrary);
             }
         } catch (IOException | InterruptedException ex) {
-            throw new RuntimeException(ex);
+            throw new CargoBuildFailureException("Could not compile", ex);
         }
     }
 
@@ -78,40 +83,50 @@ public class CargoBuild {
         return new ProcessBuilder(commandParts);
     }
 
-    private static void moveLibIntoClasspath(Path library) {
-        try {
-            Path outputDir = outputDir();
-            outputDir.toFile().mkdirs();
-            System.out.format("Installing %s into %s%n", library, outputDir);
-            Files.copy(library, outputDir.resolve(library.getFileName()), StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException ex) {
-            throw new RuntimeException(ex);
-        }
+    private static void moveLibIntoClasspath(Path library) throws IOException {
+        Path outputDir = outputDir();
+        outputDir.toFile().mkdirs();
+        System.out.format("Installing %s into %s%n", library, outputDir);
+        Files.copy(library, outputDir.resolve(library.getFileName()), StandardCopyOption.REPLACE_EXISTING);
     }
 
+    /**
+     * Determines the {@link Path} in which to store compiled native libraries
+     * compiled for the current system's OS+architecture combo.
+     * @return the {@link Path} to store the compiled libraries in
+     */
     private static Path outputDir() {
         return Paths.get("target", "classes", osArchName());
     }
 
+    /**
+     * Determines the name of the current OS+architecture combo, for use in {@link #outputDir()}.
+     * @return a file-safe name for the current OS+architecture combo
+     */
     private static String osArchName() {
         return Os.getCurrent().jnaArchString();
     }
 
+    /**
+     * Returns a {@link List} of files compiled by cargo into {@link #RUST_OUTPUT_DIR}.
+     * @return a {@link List} of all compiled dynamic libraries in the output directory
+     * @throws IOException if the filesystem cannot be used to load paths to these files
+     */
     private static List<Path> compiledRustLibraries() throws IOException {
-        return findFiles(RUST_OUTPUT_DIR, new FileFinder() {
-
-            @Override
-            protected boolean accept(Path file, BasicFileAttributes attrs) {
-                return isDylib(file, attrs);
-            }
-        });
+        try (Stream<Path> dylibs = Files.find(RUST_OUTPUT_DIR, Integer.MAX_VALUE, (file, attrs) -> isDylib(file, attrs))) {
+            return dylibs.collect(Collectors.toList());
+        }
     }
 
-    private static List<Path> findFiles(Path startPath, FileFinder finder) throws IOException {
-        Files.walkFileTree(startPath, finder);
-        return finder.getFound();
-    }
-
+    /**
+     * Indicates whether or not this build task is being run via Netbeans,
+     * so that {@link #cargoBuildProcess} can run an optimized build process.
+     *
+     * This method could stand to be improved, either using a factory/strategy pattern to return builders,
+     * or by simply checking for {@code bash} on the path rather than assuming it can only be used if we're in Netbeans.
+     *
+     * @return {@code true} if this build task is being run via Netbeans, or {@code false} otherwise
+     */
     private static boolean inNetbeans() {
         return System.getenv().entrySet()
                .stream()
@@ -122,6 +137,12 @@ public class CargoBuild {
         });
     }
 
+    /**
+     * Indicates whether or not the file at the given path is a dynamic library.
+     * @param path the path to a file
+     * @param attributes the attributes of that file
+     * @return {@code true} if the file looks like a dynamic library, and {@code false} otherwise
+     */
     private static boolean isDylib(Path path, BasicFileAttributes attributes) {
         String pathString = path.toString();
         int lastPeriodIndex = pathString.lastIndexOf(".");
@@ -129,10 +150,16 @@ public class CargoBuild {
             return false;
         }
         String pathExtension = pathString.substring(lastPeriodIndex);
-        List<String> dylibExtensions = asList(".dylib", ".so", ".dll");
-        return attributes.isRegularFile() && dylibExtensions.contains(pathExtension);
+        return attributes.isRegularFile() && DYLIB_EXTENSIONS.contains(pathExtension);
     }
 
+    /**
+     * Defines basic details of various operating systems,
+     * specifically the strings used by JNA to represent OS+architecture combos.
+     *
+     * These strings are used to determine in what subdirectories
+     * to store/load dynamic libraries.
+     */
     private enum Os {
         MAC_OS("mac", "darwin") {
             @Override
@@ -187,36 +214,13 @@ public class CargoBuild {
         }
     }
 
-    private static abstract class FileFinder implements FileVisitor<Path> {
-        private final List<Path> found = new LinkedList<>();
-
-        List<Path> getFound() {
-            return found;
+    private static class CargoBuildFailureException extends Exception {
+        public CargoBuildFailureException(String message) {
+            super(message);
         }
 
-        @Override
-        public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-            return FileVisitResult.CONTINUE;
+        public CargoBuildFailureException(String message, Throwable cause) {
+            super(message, cause);
         }
-
-        @Override
-        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-            if (accept(file, attrs)) {
-                found.add(file);
-            }
-            return FileVisitResult.CONTINUE;
-        }
-
-        @Override
-        public FileVisitResult visitFileFailed(Path file, IOException exc) {
-            return FileVisitResult.CONTINUE;
-        }
-
-        @Override
-        public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
-            return FileVisitResult.CONTINUE;
-        }
-
-        protected abstract boolean accept(Path file, BasicFileAttributes attrs);
     }
 }

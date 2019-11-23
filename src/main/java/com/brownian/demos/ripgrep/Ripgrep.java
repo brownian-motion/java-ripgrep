@@ -77,18 +77,8 @@ public class Ripgrep
 	 */
 	public static class SearchResult
 	{
-		private int lineNumber;
-		private String text;
-
-		public int getLineNumber()
-		{
-			return this.lineNumber;
-		}
-
-		public String getText()
-		{
-			return this.text;
-		}
+		private final int lineNumber;
+		private final String text;
 
 		public SearchResult(int lineNumber, String text)
 		{
@@ -106,6 +96,16 @@ public class Ripgrep
 			// we need to consume this in a way that does not maintain any references to the native struct;
 			// therefore we have to straight-up copy everything
 			this(nativeResult.line_number, nativeResult.bytes.getByteArray(0, nativeResult.num_bytes));
+		}
+
+		public int getLineNumber()
+		{
+			return this.lineNumber;
+		}
+
+		public String getText()
+		{
+			return this.text;
 		}
 	}
 

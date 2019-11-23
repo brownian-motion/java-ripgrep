@@ -1,14 +1,15 @@
 package com.brownian.demos.ripgrep;
 
+import java.nio.charset.StandardCharsets;
+
 import com.sun.jna.Memory;
-import java.nio.charset.StandardCharsets; // guaranteed to be in every implementation of the Java platform
 
-public class Main {
+public class Main
+{
+	// TODO: make this an interesting demo, with a GUI!
 
-	private static String staticFilename;
-	private static String staticSearchText;
-
-	public static void main(String[] args) {
+	public static void main(String[] args)
+	{
 		RipgrepNativeMapping.SearchResultCallback callback = result -> {
 			System.out.println("Result received!");
 			System.out.flush();
@@ -18,25 +19,24 @@ public class Main {
 		search_file("bee_movie.txt", "[Bb]ee", callback);
 	}
 
-	private static int search_file(String filename, String searchText, RipgrepNativeMapping.SearchResultCallback callback) {
+	private static int search_file(String filename, String searchText, RipgrepNativeMapping.SearchResultCallback callback)
+	{
 		System.out.printf("Searching for \"%s\" in file \"%s\" from Java...%n", searchText, filename);
 		System.out.flush();
 
-		staticFilename = filename;
-		staticSearchText = searchText;
-
 		int statusCode = RipgrepNativeMapping.LIB.search_file(
-		                     staticFilename,
-		                     staticSearchText,
-		                     callback
-		                 );
+				filename,
+				searchText,
+				callback
+		);
 
 		System.out.println("Finished ripgrep search with status " + statusCode);
 
 		return statusCode;
 	}
 
-	private static Memory convertToCString(String str) {
+	private static Memory convertToCString(String str)
+	{
 		// A normal java.lang.String would trigger a MemoryException when used in native code,
 		// because of how the JVM manages its memory internally.
 		// This ensures that 1) the character encoding is what native code expects,
@@ -44,7 +44,8 @@ public class Main {
 		byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
 		long numBytes = bytes.length;
 		Memory memory = new Memory(numBytes + 1);
-		for (int i = 0 ; i < numBytes ; i++) {
+		for (int i = 0; i < numBytes; i++)
+		{
 			memory.setByte(i, bytes[i]);
 		}
 		memory.setByte(numBytes, (byte) 0); // NUL-terminate string

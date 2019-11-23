@@ -1,11 +1,15 @@
 package com.brownian.demos.ripgrep;
 
-import org.junit.Test;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
-public class RipgrepNativeMappingTest {
+import org.junit.Test;
+
+public class RipgrepNativeMappingTest
+{
 	@Test
-	public void test_searchBeeMovieScriptForBees() {
+	public void test_searchBeeMovieScriptForBees()
+	{
 		final int[] numCalls = { 0 }; // necessary bc lambda captures must be final
 		RipgrepNativeMapping.SearchResultCallback callback = result -> {
 			numCalls[0]++;
@@ -16,11 +20,12 @@ public class RipgrepNativeMappingTest {
 
 		assertEquals(RipgrepNativeMapping.ErrorCodes.SUCCESS, status);
 		assertEquals("There should be 82 lines with \"bee\" in them in the entire script of Bee Movie",
-		             82, numCalls[0]);
+				82, numCalls[0]);
 	}
 
 	@Test
-	public void test_returnsErrorFromCallback_whenCallbackReturnsFalse() {
+	public void test_returnsErrorFromCallback_whenCallbackReturnsFalse()
+	{
 		int[] numCalls = { 0 }; // necessary bc lambda captures must be final
 		RipgrepNativeMapping.SearchResultCallback callback = result -> {
 			numCalls[0]++;
@@ -34,14 +39,16 @@ public class RipgrepNativeMappingTest {
 	}
 
 	@Test
-	public void test_returnsMissingCallback_whenCallbackIsNull() {
+	public void test_returnsMissingCallback_whenCallbackIsNull()
+	{
 		int status = RipgrepNativeMapping.LIB.search_file("bee_movie.txt", "[Bb]ee", null);
 
 		assertEquals(RipgrepNativeMapping.ErrorCodes.MISSING_CALLBACK, status);
 	}
 
 	@Test
-	public void test_returnsMissingFilename_whenFilenameIsNull() {
+	public void test_returnsMissingFilename_whenFilenameIsNull()
+	{
 		RipgrepNativeMapping.SearchResultCallback callback = result -> {
 			fail("This callback should never be called!");
 			return true;
@@ -53,7 +60,8 @@ public class RipgrepNativeMappingTest {
 	}
 
 	@Test
-	public void test_returnsMissingSearchText_whenSearchTextIsNull() {
+	public void test_returnsMissingSearchText_whenSearchTextIsNull()
+	{
 		RipgrepNativeMapping.SearchResultCallback callback = result -> {
 			fail("This callback should never be called!");
 			return true;

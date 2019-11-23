@@ -1,3 +1,22 @@
-/target
+# Vim
 **/*.rs.bk
+
+# Sublime
 *.sublime*
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Intellij
+.idea/
+*.iml
+*.iws
+
+# Mac
+.DS_Store
+
+# Maven
+log/
+target/

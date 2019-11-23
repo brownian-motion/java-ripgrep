@@ -1,11 +1,12 @@
 extern crate grep;
-use grep::regex::RegexMatcher;
-use grep::searcher::Searcher;
-use std::io::Write;
-use std::os::raw::c_char;
 
 use std::fs::File;
 use std::io;
+use std::io::Write;
+use std::os::raw::c_char;
+
+use grep::regex::RegexMatcher;
+use grep::searcher::Searcher;
 
 use parse::*;
 pub use types::*;
@@ -54,9 +55,10 @@ pub extern "C" fn search_file(
 
 // Defines the various types and enums used by this wrapper library
 mod types {
-    use grep::searcher::{Searcher, Sink, SinkError, SinkMatch};
     use std::fmt;
     use std::os::raw::c_int;
+
+    use grep::searcher::{Searcher, Sink, SinkError, SinkMatch};
 
     // For use returning back through the FFI.
     // Note that the bytes inside are NOT nul-terminated!
@@ -64,7 +66,8 @@ mod types {
     #[no_mangle] // or else JNA can't determine what fields the struct has
     pub struct SearchResult {
         pub line_number: c_int,
-        pub bytes: *const u8, // NOT nul-terminated!
+        pub bytes: *const u8,
+        // NOT nul-terminated!
         pub num_bytes: c_int,
     }
 
@@ -144,13 +147,12 @@ mod types {
 
 // Handles parsing parameters passed to the library
 mod parse {
-    use grep::regex::RegexMatcher;
-    use std::os::raw::c_char;
-
     use std::ffi::CStr;
     use std::fs::File;
-
+    use std::os::raw::c_char;
     use std::str::{from_utf8, Utf8Error};
+
+    use grep::regex::RegexMatcher;
 
     use crate::types::*;
 
@@ -212,13 +214,16 @@ mod parse {
 
     #[cfg(test)]
     mod tests {
-        use super::*;
         use std::ffi::CString;
         use std::ptr;
 
+        use super::*;
+
+        const BEE_MOVIE_FILE_NAME: &'static str = "src/test/resources/bee_movie.txt";
+
         #[test]
         fn test_opening_bee_movie_script() {
-            let filename = CString::new("bee_movie.txt").unwrap();
+            let filename = CString::new(BEE_MOVIE_FILE_NAME).unwrap();
             let file = open_filename(filename.as_ptr());
             assert!(
                 file.is_ok(),
@@ -268,14 +273,21 @@ mod parse {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::ffi::*;
     use std::ptr;
 
+    use super::*;
+
+    const BEE_MOVIE_FILE_NAME: &'static str = "src/test/resources/bee_movie.txt";
+
+    fn as_cstring(text: &str) -> CString {
+        let error = format!("Could not represent {:?} as a CString", text);
+        CString::new(text).expect(&error)
+    }
+
     #[test]
     fn test_search_for_bees_without_error() {
-        let filename = CString::new("bee_movie.txt")
-            .expect("Could not represent \"bee_movie.txt\" as a CString");
+        let filename = as_cstring(BEE_MOVIE_FILE_NAME);
         let search_pattern =
             CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
         let callback = always_succeeding_callback;
@@ -288,8 +300,7 @@ mod tests {
 
     #[test]
     fn test_search_for_bees_returns_callback_error_code_when_callback_returns_false() {
-        let filename = CString::new("bee_movie.txt")
-            .expect("Could not represent \"bee_movie.txt\" as a CString");
+        let filename = as_cstring(BEE_MOVIE_FILE_NAME);
         let search_pattern =
             CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
         let callback = always_failing_callback;
@@ -328,8 +339,7 @@ mod tests {
 
     #[test]
     fn test_search_for_null_search_text_returns_missing_search_text_error_code() {
-        let filename = CString::new("bee_movie.txt")
-            .expect("Could not represent \"bee_movie.txt\" as a CString");
+        let filename = as_cstring(BEE_MOVIE_FILE_NAME);
         let callback = always_succeeding_callback;
 
         let result_code = search_file(filename.as_ptr(), ptr::null(), Some(callback));
@@ -340,8 +350,7 @@ mod tests {
 
     #[test]
     fn test_search_with_null_callback_returns_missing_callback_error_code() {
-        let filename = CString::new("bee_movie.txt")
-            .expect("Could not represent \"bee_movie.txt\" as a CString");
+        let filename = as_cstring(BEE_MOVIE_FILE_NAME);
         let search_pattern =
             CString::new("[Bb]ee").expect("Could not represent \"[Bb]ee\" as a CString");
 
@@ -353,15 +362,15 @@ mod tests {
 
     #[test]
     fn test_calling_callback_single_element() {
-        let filename = CString::new("bee_movie.txt").unwrap();
-        let search_text = CString::new("graduation").unwrap(); // only on line 13
+        let filename = as_cstring(BEE_MOVIE_FILE_NAME);
+        let search_text = as_cstring("graduation"); // only on line 13
         let callback: SearchResultCallbackFn = match_graduation_on_line_13_callback;
 
         // testing inherently unsafe code, this is fine (without locks) if this test is only run once each execution
         unsafe { NUM_GRADUATIONS = 0 };
         let result_code = search_file(filename.as_ptr(), search_text.as_ptr(), Some(callback));
         assert_eq!(SearchStatusCode::Success, result_code,
-            "There is one match for \"graduation\" in the Bee Movie script, so a search for that literal should yield a successful result");
+                   "There is one match for \"graduation\" in the Bee Movie script, so a search for that literal should yield a successful result");
         assert_eq!(
             1,
             // testing inherently unsafe code, this is fine if this test is only run once each execution

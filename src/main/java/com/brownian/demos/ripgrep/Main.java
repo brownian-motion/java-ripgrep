@@ -16,7 +16,7 @@ public class Main
 			return true;
 		};
 
-		search_file("bee_movie.txt", "[Bb]ee", callback);
+		search_file("src/main/resources/bee_movie.txt", "[Bb]ee", callback);
 	}
 
 	private static int search_file(String filename, String searchText, RipgrepNativeMapping.SearchResultCallback callback)

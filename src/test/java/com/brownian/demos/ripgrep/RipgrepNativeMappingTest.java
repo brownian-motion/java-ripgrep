@@ -7,6 +7,9 @@ import org.junit.Test;
 
 public class RipgrepNativeMappingTest
 {
+
+	public static final String BEE_MOVIE_FILE_NAME = "src/test/resources/bee_movie.txt";
+
 	@Test
 	public void test_searchBeeMovieScriptForBees()
 	{
@@ -16,7 +19,7 @@ public class RipgrepNativeMappingTest
 			return true;
 		};
 
-		int status = RipgrepNativeMapping.LIB.search_file("bee_movie.txt", "[Bb]ee", callback);
+		int status = RipgrepNativeMapping.LIB.search_file(BEE_MOVIE_FILE_NAME, "[Bb]ee", callback);
 
 		assertEquals(RipgrepNativeMapping.ErrorCodes.SUCCESS, status);
 		assertEquals("There should be 82 lines with \"bee\" in them in the entire script of Bee Movie",
@@ -32,7 +35,7 @@ public class RipgrepNativeMappingTest
 			return false;
 		};
 
-		int status = RipgrepNativeMapping.LIB.search_file("bee_movie.txt", "[Bb]ee", callback);
+		int status = RipgrepNativeMapping.LIB.search_file(BEE_MOVIE_FILE_NAME, "[Bb]ee", callback);
 
 		assertEquals(RipgrepNativeMapping.ErrorCodes.ERROR_FROM_CALLBACK, status);
 		assertEquals(1, numCalls[0]);
@@ -41,7 +44,7 @@ public class RipgrepNativeMappingTest
 	@Test
 	public void test_returnsMissingCallback_whenCallbackIsNull()
 	{
-		int status = RipgrepNativeMapping.LIB.search_file("bee_movie.txt", "[Bb]ee", null);
+		int status = RipgrepNativeMapping.LIB.search_file(BEE_MOVIE_FILE_NAME, "[Bb]ee", null);
 
 		assertEquals(RipgrepNativeMapping.ErrorCodes.MISSING_CALLBACK, status);
 	}
@@ -67,7 +70,7 @@ public class RipgrepNativeMappingTest
 			return true;
 		};
 
-		int status = RipgrepNativeMapping.LIB.search_file("bee_movie.txt", null, callback);
+		int status = RipgrepNativeMapping.LIB.search_file(BEE_MOVIE_FILE_NAME, null, callback);
 
 		assertEquals(RipgrepNativeMapping.ErrorCodes.MISSING_SEARCH_TEXT, status);
 	}

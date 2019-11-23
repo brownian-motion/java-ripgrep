@@ -20,6 +20,7 @@ import org.junit.Test;
 
 public class RipgrepTest
 {
+	public static final String BEE_MOVIE_FILE_NAME = "src/test/resources/bee_movie.txt";
 	private static final String[] NON_EXISTENT_FILES = { "missing_file.txt", "doesn'tExist!.dat" };
 
 	@Test
@@ -30,7 +31,7 @@ public class RipgrepTest
 		//noinspection unchecked
 		Consumer<Ripgrep.SearchResult> resultConsumer = mock(Consumer.class);
 
-		Ripgrep.searchFile(Paths.get("bee_movie.txt"), Pattern.compile("[Bb]ee"), resultConsumer);
+		Ripgrep.searchFile(Paths.get(BEE_MOVIE_FILE_NAME), Pattern.compile("[Bb]ee"), resultConsumer);
 
 		verify(resultConsumer, times(82)).accept(any(Ripgrep.SearchResult.class));
 	}
@@ -43,7 +44,7 @@ public class RipgrepTest
 		//noinspection unchecked
 		Consumer<Ripgrep.SearchResult> resultConsumer = mock(Consumer.class);
 
-		Ripgrep.searchFile(Paths.get("bee_movie.txt"), Pattern.compile("bee"), resultConsumer);
+		Ripgrep.searchFile(Paths.get(BEE_MOVIE_FILE_NAME), Pattern.compile("bee"), resultConsumer);
 
 		verify(resultConsumer, times(66)).accept(any(Ripgrep.SearchResult.class));
 	}
@@ -59,7 +60,7 @@ public class RipgrepTest
 
 		try
 		{
-			Ripgrep.searchFile(Paths.get("bee_movie.txt"), Pattern.compile("[Bb]ee"), resultConsumer);
+			Ripgrep.searchFile(Paths.get(BEE_MOVIE_FILE_NAME), Pattern.compile("[Bb]ee"), resultConsumer);
 			fail("Because the callback throws an exception, the Ripgrep search function should throw an Exception");
 		}
 		catch (Ripgrep.RipgrepException e)
@@ -84,7 +85,7 @@ public class RipgrepTest
 
 		try
 		{
-			Ripgrep.searchFile(Paths.get("bee_movie.txt"), Pattern.compile("[Bb]ee"), resultConsumer);
+			Ripgrep.searchFile(Paths.get(BEE_MOVIE_FILE_NAME), Pattern.compile("[Bb]ee"), resultConsumer);
 			fail("Ripgrep search function should throw exception when provided search result consumer callback throws Exception");
 		}
 		catch (Ripgrep.RipgrepException e)
@@ -99,7 +100,7 @@ public class RipgrepTest
 		// using Mockito mock so I can verify() that the callback was actually called
 		//noinspection unchecked
 		Consumer<Ripgrep.SearchResult> resultConsumer = mock(Consumer.class);
-		Ripgrep.searchFile(Paths.get("bee_movie.txt"), null, resultConsumer);
+		Ripgrep.searchFile(Paths.get(BEE_MOVIE_FILE_NAME), null, resultConsumer);
 		verifyZeroInteractions(resultConsumer);
 	}
 
@@ -116,7 +117,7 @@ public class RipgrepTest
 	@Test(expected = IllegalArgumentException.class)
 	public void searchFile_throwsIllegalArgumentException_whenNullCallbackPassed() throws Ripgrep.RipgrepException
 	{
-		Ripgrep.searchFile(Paths.get("bee_movie.txt"), Pattern.compile("[Bb]ee"), null);
+		Ripgrep.searchFile(Paths.get(BEE_MOVIE_FILE_NAME), Pattern.compile("[Bb]ee"), null);
 	}
 
 	@Test
@@ -150,7 +151,7 @@ public class RipgrepTest
 		{
 			try
 			{
-				Ripgrep.searchFile(Paths.get("bee_movie.txt"), Pattern.compile(badPattern), resultConsumer);
+				Ripgrep.searchFile(Paths.get(BEE_MOVIE_FILE_NAME), Pattern.compile(badPattern), resultConsumer);
 			}
 			catch (Ripgrep.RipgrepException e)
 			{

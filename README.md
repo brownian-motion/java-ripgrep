@@ -10,10 +10,12 @@ this repo is primarily a demo and is not intended for production use.
 It is licensed under [GPL 3](https://www.gnu.org/licenses/gpl-3.0.en.html), so feel free to use it however you like; just don't blame me for bugs!
 
 ## Installing
-Because native code is not portable, the native side of this library must be re-compiled for each OS/architecture.
+Because native code is not portable, native libraries must be re-compiled for each OS/architecture.
+
 Since this code is written in Rust, you must compile it using [the Rust toolchain](https://rustup.rs/) before it can be used. You can visit https://rustup.rs or use the provided [rustup PowerShell script](src/build/scripts/rustup.ps1) to install this toolchain.
-This demo was prepared using library version of ripgrep (`grep v0.2`) and compiled with `rust 1.39 (stable)`. For convenience, this repos uses [a maven build script for Rust code](src/build/java/com/github/drrb/javarust/build/CargoBuild.java).
-To compile, you need `cargo` and `mvn` on your path.
+This demo was prepared using library version of ripgrep (`grep v0.2`) and compiled with `rust 1.39 (stable)`, available on [crates.io](https://crates.io). For convenience, this repos uses [a maven build script for Rust code](src/build/java/com/github/drrb/javarust/build/CargoBuild.java).
+
+**To compile, you need `cargo` and `mvn` on your path.**
 
 ## Contributing
 I will happily accept any contributions that improve the codebase.

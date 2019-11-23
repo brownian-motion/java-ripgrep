@@ -1,15 +1,24 @@
 package com.brownian.demos.ripgrep;
 
-import com.sun.jna.*;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
 
-public interface RipgrepNativeMapping extends Library {
+import com.sun.jna.Callback;
+import com.sun.jna.Library;
+import com.sun.jna.Native;
+import com.sun.jna.NativeLibrary;
+import com.sun.jna.Pointer;
+import com.sun.jna.Structure;
+
+interface RipgrepNativeMapping extends Library
+{
 	final String JNA_LIBRARY_NAME = "ripgrep_test_playground";
 	final NativeLibrary JNA_NATIVE_LIB = NativeLibrary.getInstance(JNA_LIBRARY_NAME);
 
 	RipgrepNativeMapping LIB = Native.loadLibrary(JNA_LIBRARY_NAME, RipgrepNativeMapping.class);
 
-	public interface SearchResultCallback extends Callback {
+	public interface SearchResultCallback extends Callback
+	{
 		boolean callback(SearchResult.ByReference result);
 	}
 

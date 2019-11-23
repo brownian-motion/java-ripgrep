@@ -1,6 +1,8 @@
 package com.brownian.demos.ripgrep;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -18,6 +20,8 @@ import org.junit.Test;
 
 public class RipgrepTest
 {
+	private static final String[] NON_EXISTENT_FILES = { "missing_file.txt", "doesn'tExist!.dat" };
+
 	@Test
 	public void searchFile_searchingUsingCharacterClass_successfulCallbackIsCalled() throws Ripgrep.RipgrepException
 	{
@@ -113,5 +117,46 @@ public class RipgrepTest
 	public void searchFile_throwsIllegalArgumentException_whenNullCallbackPassed() throws Ripgrep.RipgrepException
 	{
 		Ripgrep.searchFile(Paths.get("bee_movie.txt"), Pattern.compile("[Bb]ee"), null);
+	}
+
+	@Test
+	public void searchFile_throwsRipgrepExceptionContainingFilename_whenSearchingMissingFilename()
+	{
+		// using Mockito mock so I can verify() that the callback was never called
+		//noinspection unchecked
+		Consumer<Ripgrep.SearchResult> resultConsumer = mock(Consumer.class);
+		for (String missingFile : NON_EXISTENT_FILES)
+		{
+			try
+			{
+				Ripgrep.searchFile(Paths.get(missingFile), Pattern.compile("[Bb]ee"), resultConsumer);
+			}
+			catch (Ripgrep.RipgrepException e)
+			{
+				verifyZeroInteractions(resultConsumer);
+				assertThat(e.getMessage(), containsString(missingFile));
+			}
+		}
+	}
+
+	@Test
+	public void searchFile_throwsRipgrepExceptionContainingPattern_whenSearchingWithInvalidPattern()
+	{
+
+		// using Mockito mock so I can verify() that the callback was never called
+		//noinspection unchecked
+		Consumer<Ripgrep.SearchResult> resultConsumer = mock(Consumer.class);
+		for (String badPattern : new String[] { Pattern.quote("\\Q\\E quotes are invalid in ripgrep") })
+		{
+			try
+			{
+				Ripgrep.searchFile(Paths.get("bee_movie.txt"), Pattern.compile(badPattern), resultConsumer);
+			}
+			catch (Ripgrep.RipgrepException e)
+			{
+				verifyZeroInteractions(resultConsumer);
+				assertThat(e.getMessage(), containsString(badPattern));
+			}
+		}
 	}
 }

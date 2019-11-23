@@ -59,7 +59,7 @@ public class Ripgrep
 			case RipgrepNativeMapping.ErrorCodes.ERROR_BAD_PATTERN:
 				throw new RipgrepException("Invalid search text \"" + nativePattern + "\". Ripgrep and JavaSE do not implement the same regex library, so Ripgrep may not support all of the same features.");
 			case RipgrepNativeMapping.ErrorCodes.ERROR_COULD_NOT_OPEN_FILE:
-				throw new IllegalArgumentException("Ripgrep could not open or read file \"" + nativeFilename + "\"");
+				throw new RipgrepException("Ripgrep could not open or read file \"" + nativeFilename + "\"");
 			case RipgrepNativeMapping.ErrorCodes.ERROR_FROM_RIPGREP:
 				throw new RipgrepException("An error was raised by Ripgrep itself. Due to the nature of the FFI interface, details are not available.");
 			case RipgrepNativeMapping.ErrorCodes.ERROR_FROM_CALLBACK:

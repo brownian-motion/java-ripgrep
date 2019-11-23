@@ -20,32 +20,21 @@ pub extern "C" fn search_file(
 ) -> SearchStatusCode {
     use SearchStatusCode::*;
 
-    let stdout = io::stdout();
-
-    println!("Reached search_file()");
-    stdout.lock().flush().unwrap();
-
     let file: File = match open_filename(filename) {
         Ok(file) => file,
         Err(code) => return code,
     };
-    println!("Opened file {:?}", file.metadata());
-    stdout.lock().flush().unwrap();
 
     let matcher: RegexMatcher = match parse_search_text(search_text) {
         Ok(matcher) => matcher,
         Err(code) => return code,
     };
-    println!("Created regex matcher {:?}", matcher);
-    stdout.lock().flush().unwrap();
 
     // the Sink type accepts search results from ripgrep
     let sink = match result_callback {
         Some(callback) => SearchResultCallbackSink(callback),
         None => return MissingCallback,
     };
-    println!("Created callback to Java function");
-    stdout.lock().flush().unwrap();
 
     match Searcher::new().search_file(&matcher, &file, sink) {
         Ok(_) => return Success,
@@ -127,16 +116,11 @@ mod types {
                 bytes: matched.bytes().as_ptr(),
                 num_bytes: matched.bytes().len() as c_int,
             };
-            eprintln!(
-                "Calling Java callback with match at line {}",
-                result.line_number
-            );
+
             let succeeded: bool = (self.0)(result);
             if succeeded {
-                eprintln!("Callback succeeded");
                 Ok(true) // callback done, keep searching
             } else {
-                eprintln!("Callback failed");
                 Err(CallbackError::error_message(
                     "Callback completed but indicated an error",
                 ))
@@ -158,14 +142,8 @@ mod parse {
 
     /// Convert a native string to a Rust string
     fn to_string(pointer: *const c_char) -> Result<String, Utf8Error> {
-        println!("Converting pointer to {:?} to CStr", pointer);
         let cstr = unsafe { CStr::from_ptr(pointer) };
-        println!("Converting CStr to byte slice");
         let slice = cstr.to_bytes();
-        println!(
-            "Reading byte slice of size {} as a UTF-8 string",
-            slice.len()
-        );
         from_utf8(slice).map(|s| s.to_string())
     }
 
@@ -182,8 +160,6 @@ mod parse {
             Ok(filename) => filename,
             Err(_) => return Err(ErrorCouldNotOpenFile),
         };
-
-        println!("Parsed filename as {:?}. Opening file...", &filename);
 
         match File::open(filename) {
             Ok(file) => Ok(file),

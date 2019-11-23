@@ -1,55 +1,45 @@
 package com.brownian.demos.ripgrep;
 
-import java.nio.charset.StandardCharsets;
-
-import com.sun.jna.Memory;
+import java.nio.file.Paths;
+import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 public class Main
 {
 	// TODO: make this an interesting demo, with a GUI!
 
-	public static void main(String[] args)
+	public static void main(String[] args) throws Ripgrep.RipgrepException
 	{
-		RipgrepNativeMapping.SearchResultCallback callback = result -> {
-			System.out.println("Result received!");
-			System.out.flush();
-			return true;
+		Consumer<Ripgrep.SearchResult> callback = result -> {
+			String line = String.format("%4d: %s", result.getLineNumber(), result.getText());
+			for (char c : line.toCharArray())
+			{
+				try
+				{
+					System.out.print(c);
+					Thread.sleep(3);
+				}
+				catch (InterruptedException ignored)
+				{
+				}
+			}
+			System.out.println();
+			try
+			{
+				Thread.sleep(100);
+			}
+			catch (InterruptedException ignored)
+			{
+			}
 		};
 
 		search_file("src/main/resources/bee_movie.txt", "[Bb]ee", callback);
 	}
 
-	private static int search_file(String filename, String searchText, RipgrepNativeMapping.SearchResultCallback callback)
+	private static void search_file(String filename, String searchText, Consumer<Ripgrep.SearchResult> callback) throws Ripgrep.RipgrepException
 	{
-		System.out.printf("Searching for \"%s\" in file \"%s\" from Java...%n", searchText, filename);
+		System.out.printf("Searching for \"%s\" in file \"%s\" using ripgrep from Java...%n", searchText, filename);
 		System.out.flush();
-
-		int statusCode = RipgrepNativeMapping.LIB.search_file(
-				filename,
-				searchText,
-				callback
-		);
-
-		System.out.println("Finished ripgrep search with status " + statusCode);
-
-		return statusCode;
-	}
-
-	private static Memory convertToCString(String str)
-	{
-		// A normal java.lang.String would trigger a MemoryException when used in native code,
-		// because of how the JVM manages its memory internally.
-		// This ensures that 1) the character encoding is what native code expects,
-		// and 2) strings are NUL-terminated like C-style libraries would expect.
-		byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
-		long numBytes = bytes.length;
-		Memory memory = new Memory(numBytes + 1);
-		for (int i = 0; i < numBytes; i++)
-		{
-			memory.setByte(i, bytes[i]);
-		}
-		memory.setByte(numBytes, (byte) 0); // NUL-terminate string
-		System.out.printf("Fit %d bytes into a buffer of size %d: %s (%s)%n", numBytes + 1, memory.size(), memory.dump(), memory);
-		return memory;
+		Ripgrep.searchFile(Paths.get(filename), Pattern.compile(searchText), callback);
 	}
 }

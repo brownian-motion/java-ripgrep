@@ -1,12 +1,14 @@
 extern crate grep;
 
 use std::fs::File;
-use std::io;
-use std::io::Write;
+
 use std::os::raw::c_char;
+use std::path::PathBuf;
 
 use grep::regex::RegexMatcher;
 use grep::searcher::Searcher;
+
+use walkdir::WalkDir;
 
 use parse::*;
 pub use types::*;
@@ -40,6 +42,53 @@ pub extern "C" fn search_file(
         Ok(_) => return Success,
         Err(_) => return ErrorFromCallback,
     };
+}
+
+#[no_mangle]
+pub extern "C" fn search_dir(
+    // every Java type is nullable, represented here as an Option<*type>
+    filename: *const c_char,
+    search_text: *const c_char,
+    result_callback: Option<SearchResultCallbackFn>,
+) -> SearchStatusCode {
+    use SearchStatusCode::*;
+
+    let dir: PathBuf = match parse_path(filename) {
+        Ok(dir) => dir,
+        Err(code) => return code,
+    };
+
+    let matcher: RegexMatcher = match parse_search_text(search_text) {
+        Ok(matcher) => matcher,
+        Err(code) => return code,
+    };
+
+    // the Sink type accepts search results from ripgrep
+    let sink = match result_callback {
+        Some(callback) => SearchResultCallbackSink(callback),
+        None => return MissingCallback,
+    };
+
+    for entry in WalkDir::new(&dir) {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => return ErrorFromRipgrep,
+        };
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        // Pass cloned sink from the outer scope.
+        // This is probably fine, since we're just cloning a function pointer.
+        // We'll trust our wrapper class to handle being called by multiple threads at once.
+        if Searcher::new()
+            .search_path(&matcher, entry.path(), sink.clone())
+            .is_err()
+        {
+            return ErrorFromCallback;
+        };
+    }
+    return Success;
 }
 
 // Defines the various types and enums used by this wrapper library
@@ -82,6 +131,7 @@ mod types {
     // #[cfg(windows)]
     // pub type SearchResultCallbackFn = extern "stdcall" fn(SearchResult) -> bool;
 
+    #[derive(Clone)]
     pub struct SearchResultCallbackSink(pub SearchResultCallbackFn);
 
     pub struct CallbackError {
@@ -134,6 +184,7 @@ mod parse {
     use std::ffi::CStr;
     use std::fs::File;
     use std::os::raw::c_char;
+    use std::path::PathBuf;
     use std::str::{from_utf8, Utf8Error};
 
     use grep::regex::RegexMatcher;
@@ -165,6 +216,23 @@ mod parse {
             Ok(file) => Ok(file),
             Err(_) => Err(ErrorCouldNotOpenFile),
         }
+    }
+
+    // Either finds the Path with the given name, or returns an error code to pass out of the library
+    pub fn parse_path(filename: *const c_char) -> Result<PathBuf, SearchStatusCode> {
+        use SearchStatusCode::*;
+
+        // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
+        if filename.is_null() {
+            return Err(MissingFilename);
+        }
+
+        let filename: String = match to_string(filename) {
+            Ok(filename) => filename,
+            Err(_) => return Err(ErrorCouldNotOpenFile),
+        };
+
+        Ok(PathBuf::from(filename))
     }
 
     // Either generates a regular-expression matcher from the given C-style string,

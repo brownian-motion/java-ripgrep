@@ -72,7 +72,7 @@ pub extern "C" fn search_dir(
     for entry in WalkDir::new(&dir) {
         let entry = match entry {
             Ok(entry) => entry,
-            Err(_) => return ErrorFromRipgrep,
+            Err(_) => return ErrorCouldNotOpenFile,
         };
         if !entry.file_type().is_file() {
             continue;

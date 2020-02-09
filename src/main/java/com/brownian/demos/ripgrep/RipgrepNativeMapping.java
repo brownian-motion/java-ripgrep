@@ -10,6 +10,24 @@ import com.sun.jna.NativeLibrary;
 import com.sun.jna.Pointer;
 import com.sun.jna.Structure;
 
+/**
+ * Declares the API of the native dynamic library we're using.
+ * <p>
+ * Because we're using JNA, we can declare a {@link Library} that uses simple Java types, like Strings.
+ * An instance of this interface is available as {@link RipgrepNativeMapping#LIB}.
+ * <p>
+ * Note that we can declare structs to pass around by extending {@link Structure},
+ * and specify pass-by-value or pass-by-reference semantics
+ * by implementing {@link Structure.ByValue} and {@link Structure.ByReference}.
+ * <p>
+ * We can specify callback functions by making an interface with exactly one method, which extends {@link Callback}.
+ * <p>
+ * Using JNA makes this wrapper interface more convenient to write, but it's not necessarily ergonomic for
+ * the end users of this library. In particular, {@link SearchResultCallback}s must take care not to throw Exceptions,
+ * and discard any references to the memory provided to them before the callback ends.
+ * To alleviate this burden, this interface is package-protected
+ * and wrapped by the {@link Ripgrep} class, which is much more natural to use.
+ */
 interface RipgrepNativeMapping extends Library
 {
 	String JNA_LIBRARY_NAME = "ripgrep_test_playground";
@@ -18,16 +36,30 @@ interface RipgrepNativeMapping extends Library
 	RipgrepNativeMapping LIB = Native.loadLibrary(JNA_LIBRARY_NAME, RipgrepNativeMapping.class);
 
 	int search_file(
-			String filename, // NUL-terminated C-string
-			String search_text, // NUL-terminated C-string
+			String filename,
+			String search_text, // Rust-style regex
 			SearchResultCallback callback
 	);
 
+
+	/**
+	 * A callback which receives matches from ripgrep, by-reference.
+	 * The memory underlying this match is owned by the native code,
+	 * so references to it must be dropped before this callback exits.
+	 * Additionally, this callback must not throw Exceptions,
+	 * or else it will corrupt the native stack during unwinding.
+	 *
+	 * @apiNote Because of the care one must take to implement this, it is only used internally within this package.
+	 */
 	interface SearchResultCallback extends Callback
 	{
 		boolean callback(SearchResult.ByReference result);
 	}
 
+	/**
+	 * Represents a search result.
+	 * Contains a pointer to natively-owned UTF-8 bytes containing the line with a match and the line number it was matched on.
+	 */
 	class SearchResult extends Structure
 	{
 		public int line_number;
@@ -49,6 +81,9 @@ interface RipgrepNativeMapping extends Library
 		}
 	}
 
+	/**
+	 * Declares constants matching each error code returned by the library.
+	 */
 	final class ErrorCodes
 	{
 		// Mirrors the C-style enums defined in the native library
@@ -64,6 +99,7 @@ interface RipgrepNativeMapping extends Library
 		// Failure from inside the callback:
 		ERROR_FROM_CALLBACK = 21;
 
+		// Since this is a utility class, it should not be instantiated.
 		private ErrorCodes()
 		{
 		}

@@ -41,6 +41,12 @@ interface RipgrepNativeMapping extends Library
 			SearchResultCallback callback
 	);
 
+	int search_dir(
+			String dirname,
+			String search_text, // Rust-style regex
+			SearchResultCallback callback
+	);
+
 
 	/**
 	 * A callback which receives matches from ripgrep, by-reference.

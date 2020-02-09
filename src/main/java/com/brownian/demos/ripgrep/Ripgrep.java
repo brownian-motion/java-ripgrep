@@ -16,6 +16,24 @@ public class Ripgrep
 {
 	public static void searchFile(Path file, Pattern pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
 	{
+		if (!file.toFile().isFile())
+		{
+			throw new IllegalArgumentException(String.format("%s is not a file", file));
+		}
+		search(file, pattern, resultConsumer, RipgrepNativeMapping.LIB::search_file);
+	}
+
+	public static void searchDir(Path dir, Pattern pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
+	{
+		if (!dir.toFile().isDirectory())
+		{
+			throw new IllegalArgumentException(String.format("%s is not a directory", dir));
+		}
+		search(dir, pattern, resultConsumer, RipgrepNativeMapping.LIB::search_dir);
+	}
+
+	public static void search(Path file, Pattern pattern, Consumer<SearchResult> resultConsumer, SearchFunction searchFunction) throws RipgrepException
+	{
 		if (file == null)
 		{
 			throw new IllegalArgumentException("Missing file name");
@@ -45,7 +63,7 @@ public class Ripgrep
 			}
 		};
 
-		final int resultStatusCode = RipgrepNativeMapping.LIB.search_file(nativeFilename, nativePattern, nativeCallback);
+		final int resultStatusCode = searchFunction.search(nativeFilename, nativePattern, nativeCallback);
 		switch (resultStatusCode)
 		{
 			case RipgrepNativeMapping.ErrorCodes.SUCCESS:
@@ -71,9 +89,18 @@ public class Ripgrep
 	}
 
 	/**
+	 * Used to abstract out common parameter-parsing and error handling
+	 * in wrapper code around {@link RipgrepNativeMapping}.
+	 */
+	private interface SearchFunction
+	{
+		int search(String file, String pattern, RipgrepNativeMapping.SearchResultCallback resultConsumer);
+	}
+
+	/**
 	 * Represents the same data as {@code RipgrepNativeMapping#SearchResult},
 	 * but without maintaining references to native memory.
-	 * This allocates an extra String for each result, but
+	 * This allocates an extra String for each result, but enables a more ergonomic interface.
 	 */
 	public static class SearchResult
 	{

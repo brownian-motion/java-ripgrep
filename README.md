@@ -45,4 +45,5 @@ For more information about FFI interfaces in Rust, Java, or in general, the foll
 - https://cffi.readthedocs.io/en/latest/ How to write a Python package using native code
 - https://www.baeldung.com/jni A simple guide to using JNI directly to reference a C++ library, without the JNA abstraction layer
 - https://github.com/BurntSushi/ripgrep `ripgrep` on Github
-- https://github.com/BurntSushi/ripgrep `ripgrep` on [crates.io](https://crates.io)
+- https://crates.io/crates/ripgrep `ripgrep` on [crates.io](https://crates.io)
+- https://www.ibm.com/support/knowledgecenter/en/SSYKE2_8.0.0/com.ibm.java.vm.80.doc/docs/jni.html IBM's reference for the Java Native Interface

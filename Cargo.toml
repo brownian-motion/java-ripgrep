@@ -1,5 +1,5 @@
 [package]
-name = "ripgrep_test_playground"
+name = "ripgrep_ffi"
 version = "0.1.0"
 authors = ["JJ Brown <jack.brown.255@gmail.com>"]
 edition = "2018"

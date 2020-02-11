@@ -28,23 +28,22 @@ import com.sun.jna.Structure;
  * To alleviate this burden, this interface is package-protected
  * and wrapped by the {@link Ripgrep} class, which is much more natural to use.
  */
-interface RipgrepNativeMapping extends Library
-{
-	String JNA_LIBRARY_NAME = "ripgrep_test_playground";
+interface RipgrepNativeMapping extends Library {
+	String JNA_LIBRARY_NAME = "ripgrep_ffi";
 	NativeLibrary JNA_NATIVE_LIB = NativeLibrary.getInstance(JNA_LIBRARY_NAME);
 
 	RipgrepNativeMapping LIB = Native.loadLibrary(JNA_LIBRARY_NAME, RipgrepNativeMapping.class);
 
 	int search_file(
-			String filename,
-			String search_text, // Rust-style regex
-			SearchResultCallback callback
+	    String filename,
+	    String search_text, // Rust-style regex
+	    SearchResultCallback callback
 	);
 
 	int search_dir(
-			String dirname,
-			String search_text, // Rust-style regex
-			SearchResultCallback callback
+	    String dirname,
+	    String search_text, // Rust-style regex
+	    SearchResultCallback callback
 	);
 
 
@@ -57,8 +56,7 @@ interface RipgrepNativeMapping extends Library
 	 *
 	 * @apiNote Because of the care one must take to implement this, it is only used internally within this package.
 	 */
-	interface SearchResultCallback extends Callback
-	{
+	interface SearchResultCallback extends Callback {
 		boolean callback(SearchResult.ByReference result);
 	}
 
@@ -66,43 +64,38 @@ interface RipgrepNativeMapping extends Library
 	 * Represents a search result.
 	 * Contains a pointer to natively-owned UTF-8 bytes containing the line with a match and the line number it was matched on.
 	 */
-	class SearchResult extends Structure
-	{
+	class SearchResult extends Structure {
 		public String file_name;
 		public int line_number;
 		public Pointer bytes;
 		public int num_bytes;
 
 		@Override
-		public List<String> getFieldOrder()
-		{
+		public List<String> getFieldOrder() {
 			return Arrays.asList("file_name", "line_number", "bytes", "num_bytes");
 		}
 
-		public static class ByReference extends SearchResult implements Structure.ByReference
-		{
+		public static class ByReference extends SearchResult implements Structure.ByReference {
 		}
 
-		public static class ByValue extends SearchResult implements Structure.ByValue
-		{
+		public static class ByValue extends SearchResult implements Structure.ByValue {
 		}
 	}
 
 	/**
 	 * Declares constants matching each error code returned by the library.
 	 */
-	final class ErrorCodes
-	{
+	final class ErrorCodes {
 		// Mirrors the C-style enums defined in the native library
 		public static final int
-				SUCCESS = 0,
-				MISSING_FILENAME = 1,
-				MISSING_SEARCH_TEXT = 2,
-				MISSING_CALLBACK = 3,
+		SUCCESS = 0,
+		MISSING_FILENAME = 1,
+		MISSING_SEARCH_TEXT = 2,
+		MISSING_CALLBACK = 3,
 		// Failure from inside ripgrep:
 		ERROR_BAD_PATTERN = 11,
-				ERROR_COULD_NOT_OPEN_FILE = 12,
-				ERROR_FROM_RIPGREP = 13,
+		ERROR_COULD_NOT_OPEN_FILE = 12,
+		ERROR_FROM_RIPGREP = 13,
 		// Failure from inside the callback:
 		ERROR_FROM_CALLBACK = 21;
 

@@ -24,6 +24,9 @@ which uses Maven and Cargo to build the module.
 
 **To compile, you need `cargo` and `mvn` on your `PATH`.**
 
+## Demo
+To compile a demo, just run `mvn package` and execute the produced `ripgrep-demo.jar`.
+
 ## Contributing
 I will happily accept any contributions that improve the codebase.
 In particular, if you see a way to fix bugs, add tests or clear demos, or otherwise improve the codebase, please feel free to help out!

@@ -121,7 +121,7 @@ public class RipgrepTest
 	}
 
 	@Test
-	public void searchFile_throwsRipgrepExceptionContainingFilename_whenSearchingMissingFilename()
+	public void searchFile_throwsExceptionContainingFilename_whenSearchingMissingFilename()
 	{
 		// using Mockito mock so I can verify() that the callback was never called
 		//noinspection unchecked
@@ -132,7 +132,7 @@ public class RipgrepTest
 			{
 				Ripgrep.searchFile(Paths.get(missingFile), Pattern.compile("[Bb]ee"), resultConsumer);
 			}
-			catch (Ripgrep.RipgrepException e)
+			catch (Exception e)
 			{
 				verifyZeroInteractions(resultConsumer);
 				assertThat(e.getMessage(), containsString(missingFile));

@@ -16,6 +16,10 @@ public class Ripgrep
 {
 	public static void searchFile(Path file, Pattern pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
 	{
+		if (file == null)
+		{
+			throw new IllegalArgumentException("Missing file name");
+		}
 		if (!file.toFile().isFile())
 		{
 			throw new IllegalArgumentException(String.format("%s is not a file", file));
@@ -25,6 +29,10 @@ public class Ripgrep
 
 	public static void searchDir(Path dir, Pattern pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
 	{
+		if (dir == null)
+		{
+			throw new IllegalArgumentException("Missing directory name");
+		}
 		if (!dir.toFile().isDirectory())
 		{
 			throw new IllegalArgumentException(String.format("%s is not a directory", dir));
@@ -107,10 +115,11 @@ public class Ripgrep
 		private final int lineNumber;
 		private final String text;
 
-		public SearchResult(int lineNumber, String text)
+		private SearchResult(RipgrepNativeMapping.SearchResult nativeResult)
 		{
-			this.lineNumber = lineNumber;
-			this.text = text;
+			// we need to consume this in a way that does not maintain any references to the native struct;
+			// therefore we have to straight-up copy everything
+			this(nativeResult.line_number, nativeResult.bytes.getByteArray(0, nativeResult.num_bytes));
 		}
 
 		private SearchResult(int lineNumber, byte[] utf8Bytes)
@@ -118,11 +127,10 @@ public class Ripgrep
 			this(lineNumber, new String(utf8Bytes, StandardCharsets.UTF_8));
 		}
 
-		private SearchResult(RipgrepNativeMapping.SearchResult nativeResult)
+		public SearchResult(int lineNumber, String text)
 		{
-			// we need to consume this in a way that does not maintain any references to the native struct;
-			// therefore we have to straight-up copy everything
-			this(nativeResult.line_number, nativeResult.bytes.getByteArray(0, nativeResult.num_bytes));
+			this.lineNumber = lineNumber;
+			this.text = text;
 		}
 
 		public int getLineNumber()

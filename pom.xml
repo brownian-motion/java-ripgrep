@@ -22,7 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 	<groupId>com.brownian.demos</groupId>
 	<artifactId>java-ripgrep-ffi</artifactId>
-	<version>1.2-SNAPSHOT</version>
+	<version>1.3-SNAPSHOT</version>
 
 	<name>Ripgrep FFI Demo</name>
 	<description>Demo of using native libraries through Java FFI, featuring ripgrep.</description>
@@ -174,7 +174,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 					</descriptorRefs>
 					<archive>
 						<manifest>
-							<mainClass>com.brownian.demos.ripgrep.Main</mainClass>
+							<mainClass>com.brownian.demos.ripgrep.MainWithGui</mainClass>
 						</manifest>
 					</archive>
 				</configuration>

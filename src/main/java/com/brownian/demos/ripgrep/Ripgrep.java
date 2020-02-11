@@ -114,23 +114,30 @@ public class Ripgrep
 	{
 		private final int lineNumber;
 		private final String text;
+		private final String fileName;
 
 		private SearchResult(RipgrepNativeMapping.SearchResult nativeResult)
 		{
 			// we need to consume this in a way that does not maintain any references to the native struct;
 			// therefore we have to straight-up copy everything
-			this(nativeResult.line_number, nativeResult.bytes.getByteArray(0, nativeResult.num_bytes));
+			this(new String(nativeResult.file_name), nativeResult.line_number, nativeResult.bytes.getByteArray(0, nativeResult.num_bytes));
 		}
 
-		private SearchResult(int lineNumber, byte[] utf8Bytes)
+		private SearchResult(String fileName, int lineNumber, byte[] utf8Bytes)
 		{
-			this(lineNumber, new String(utf8Bytes, StandardCharsets.UTF_8));
+			this(fileName, lineNumber, new String(utf8Bytes, StandardCharsets.UTF_8));
 		}
 
-		public SearchResult(int lineNumber, String text)
+		public SearchResult(String fileName, int lineNumber, String text)
 		{
+			this.fileName = fileName;
 			this.lineNumber = lineNumber;
 			this.text = text;
+		}
+
+		public String getFileName()
+		{
+			return this.fileName;
 		}
 
 		public int getLineNumber()

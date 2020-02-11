@@ -68,6 +68,7 @@ interface RipgrepNativeMapping extends Library
 	 */
 	class SearchResult extends Structure
 	{
+		public String file_name;
 		public int line_number;
 		public Pointer bytes;
 		public int num_bytes;
@@ -75,7 +76,7 @@ interface RipgrepNativeMapping extends Library
 		@Override
 		public List<String> getFieldOrder()
 		{
-			return Arrays.asList("line_number", "bytes", "num_bytes");
+			return Arrays.asList("file_name", "line_number", "bytes", "num_bytes");
 		}
 
 		public static class ByReference extends SearchResult implements Structure.ByReference
@@ -106,8 +107,7 @@ interface RipgrepNativeMapping extends Library
 		ERROR_FROM_CALLBACK = 21;
 
 		// Since this is a utility class, it should not be instantiated.
-		private ErrorCodes()
-		{
+		private ErrorCodes() {
 		}
 	}
 }

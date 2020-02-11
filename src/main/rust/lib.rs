@@ -1,13 +1,10 @@
 extern crate grep;
 
-use std::fs::File;
-
 use std::os::raw::c_char;
-use std::path::PathBuf;
 
 use grep::regex::RegexMatcher;
 use grep::searcher::Searcher;
-
+use walkdir::DirEntry;
 use walkdir::WalkDir;
 
 use parse::*;
@@ -22,8 +19,8 @@ pub extern "C" fn search_file(
 ) -> SearchStatusCode {
     use SearchStatusCode::*;
 
-    let file: File = match open_filename(filename) {
-        Ok(file) => file,
+    let path = match parse_path(filename) {
+        Ok(path) => path,
         Err(code) => return code,
     };
 
@@ -34,11 +31,11 @@ pub extern "C" fn search_file(
 
     // the Sink type accepts search results from ripgrep
     let sink = match result_callback {
-        Some(callback) => SearchResultCallbackSink(callback),
+        Some(callback) => SearchResultCallbackSink(callback, &path),
         None => return MissingCallback,
     };
 
-    match Searcher::new().search_file(&matcher, &file, sink) {
+    match Searcher::new().search_path(&matcher, &path, sink) {
         Ok(_) => return Success,
         Err(_) => return ErrorFromCallback,
     };
@@ -53,7 +50,7 @@ pub extern "C" fn search_dir(
 ) -> SearchStatusCode {
     use SearchStatusCode::*;
 
-    let dir: PathBuf = match parse_path(filename) {
+    let dir = match parse_path(filename) {
         Ok(dir) => dir,
         Err(code) => return code,
     };
@@ -63,17 +60,26 @@ pub extern "C" fn search_dir(
         Err(code) => return code,
     };
 
-    // the Sink type accepts search results from ripgrep
-    let sink = match result_callback {
-        Some(callback) => SearchResultCallbackSink(callback),
+    let callback = match result_callback {
+        Some(callback) => callback,
         None => return MissingCallback,
     };
 
-    for entry in WalkDir::new(&dir) {
+    fn is_hidden(entry: &DirEntry) -> bool {
+        entry
+            .file_name()
+            .to_str()
+            .map(|s| s.starts_with("."))
+            .unwrap_or(false)
+    }
+
+    let walker = WalkDir::new(&dir).into_iter();
+    for entry in walker.filter_entry(|e| !is_hidden(e)) {
         let entry = match entry {
             Ok(entry) => entry,
             Err(_) => return ErrorCouldNotOpenFile,
         };
+
         if !entry.file_type().is_file() {
             continue;
         }
@@ -82,7 +88,11 @@ pub extern "C" fn search_dir(
         // This is probably fine, since we're just cloning a function pointer.
         // We'll trust our wrapper class to handle being called by multiple threads at once.
         if Searcher::new()
-            .search_path(&matcher, entry.path(), sink.clone())
+            .search_path(
+                &matcher,
+                entry.path(),
+                SearchResultCallbackSink(callback, entry.path()),
+            )
             .is_err()
         {
             return ErrorFromCallback;
@@ -94,7 +104,9 @@ pub extern "C" fn search_dir(
 // Defines the various types and enums used by this wrapper library
 mod types {
     use std::fmt;
+    use std::os::raw::c_char;
     use std::os::raw::c_int;
+    use std::path::Path;
 
     use grep::searcher::{Searcher, Sink, SinkError, SinkMatch};
 
@@ -103,6 +115,7 @@ mod types {
     #[repr(C)]
     #[no_mangle] // or else JNA can't determine what fields the struct has
     pub struct SearchResult {
+        pub file_name: *const c_char,
         pub line_number: c_int,
         pub bytes: *const u8,
         // NOT nul-terminated!
@@ -132,7 +145,7 @@ mod types {
     // pub type SearchResultCallbackFn = extern "stdcall" fn(SearchResult) -> bool;
 
     #[derive(Clone)]
-    pub struct SearchResultCallbackSink(pub SearchResultCallbackFn);
+    pub struct SearchResultCallbackSink<'a>(pub SearchResultCallbackFn, pub &'a Path);
 
     pub struct CallbackError {
         error_message: String,
@@ -146,7 +159,7 @@ mod types {
         }
     }
 
-    impl Sink for SearchResultCallbackSink {
+    impl Sink for SearchResultCallbackSink<'_> {
         type Error = CallbackError;
 
         fn matched(
@@ -155,6 +168,7 @@ mod types {
             matched: &SinkMatch,
         ) -> Result<bool, CallbackError> {
             let result = SearchResult {
+                file_name: self.1.to_str().unwrap_or("<unknown file>").as_ptr() as *const i8,
                 // -1 is a common value to use in Java when an int value is not found
                 line_number: matched.line_number().map(|n| n as c_int).unwrap_or(-1),
                 // lifetime should be good because the callback will finish before the buffer is modified.
@@ -182,7 +196,6 @@ mod types {
 // Handles parsing parameters passed to the library
 mod parse {
     use std::ffi::CStr;
-    use std::fs::File;
     use std::os::raw::c_char;
     use std::path::PathBuf;
     use std::str::{from_utf8, Utf8Error};
@@ -198,26 +211,6 @@ mod parse {
         from_utf8(slice).map(|s| s.to_string())
     }
 
-    // Either opens the file with the given name, or returns an error code to pass out of the library
-    pub fn open_filename(filename: *const c_char) -> Result<File, SearchStatusCode> {
-        use SearchStatusCode::*;
-
-        // Java owns the string, so we view the text as a &CStr reference rather than an owned CString
-        if filename.is_null() {
-            return Err(MissingFilename);
-        }
-
-        let filename: String = match to_string(filename) {
-            Ok(filename) => filename,
-            Err(_) => return Err(ErrorCouldNotOpenFile),
-        };
-
-        match File::open(filename) {
-            Ok(file) => Ok(file),
-            Err(_) => Err(ErrorCouldNotOpenFile),
-        }
-    }
-
     // Either finds the Path with the given name, or returns an error code to pass out of the library
     pub fn parse_path(filename: *const c_char) -> Result<PathBuf, SearchStatusCode> {
         use SearchStatusCode::*;
@@ -227,12 +220,16 @@ mod parse {
             return Err(MissingFilename);
         }
 
-        let filename: String = match to_string(filename) {
-            Ok(filename) => filename,
+        let path = match to_string(filename) {
+            Ok(filename) => PathBuf::from(filename),
             Err(_) => return Err(ErrorCouldNotOpenFile),
         };
 
-        Ok(PathBuf::from(filename))
+        if path.exists() {
+            Ok(path)
+        } else {
+            Err(ErrorCouldNotOpenFile)
+        }
     }
 
     // Either generates a regular-expression matcher from the given C-style string,
@@ -268,7 +265,7 @@ mod parse {
         #[test]
         fn test_opening_bee_movie_script() {
             let filename = CString::new(BEE_MOVIE_FILE_NAME).unwrap();
-            let file = open_filename(filename.as_ptr());
+            let file = parse_path(filename.as_ptr());
             assert!(
                 file.is_ok(),
                 "Could not open test resource \"bee_movie.txt\" using a C-style pointer"
@@ -280,7 +277,7 @@ mod parse {
             let filename = CString::new("non_existant_file.txt").unwrap();
             assert_eq!(
                 SearchStatusCode::ErrorCouldNotOpenFile,
-                open_filename(filename.as_ptr())
+                parse_path(filename.as_ptr())
                     .expect_err("Should not have been able to open missing file")
             );
         }
@@ -289,7 +286,7 @@ mod parse {
         fn test_opening_null_filename_returns_appropriate_error_code() {
             assert_eq!(
                 SearchStatusCode::MissingFilename,
-                open_filename(ptr::null())
+                parse_path(ptr::null())
                     .expect_err("Should not have been able to open a file with a null filename")
             );
         }

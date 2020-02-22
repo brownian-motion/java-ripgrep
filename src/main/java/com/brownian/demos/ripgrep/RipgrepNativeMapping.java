@@ -26,7 +26,7 @@ import com.sun.jna.Structure;
  * the end users of this library. In particular, {@link SearchResultCallback}s must take care not to throw Exceptions,
  * and discard any references to the memory provided to them before the callback ends.
  * To alleviate this burden, this interface is package-protected
- * and wrapped by the {@link Ripgrep} class, which is much more natural to use.
+ * and wrapped by the {@link RipgrepSearcher} class, which is much more natural to use.
  */
 interface RipgrepNativeMapping extends Library {
 	String JNA_LIBRARY_NAME = "ripgrep_ffi";

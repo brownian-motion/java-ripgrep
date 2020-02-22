@@ -3,7 +3,6 @@ package com.brownian.demos.ripgrep;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 
 
 /**
@@ -12,35 +11,9 @@ import java.util.regex.Pattern;
  *
  * This class is intended to expose that functionality in a nice way for Java users.
  */
-public class Ripgrep
+public class RipgrepSearcher
 {
-	public static void searchFile(Path file, Pattern pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
-	{
-		if (file == null)
-		{
-			throw new IllegalArgumentException("Missing file name");
-		}
-		if (!file.toFile().isFile())
-		{
-			throw new IllegalArgumentException(String.format("%s is not a file", file));
-		}
-		search(file, pattern, resultConsumer, RipgrepNativeMapping.LIB::search_file);
-	}
-
-	public static void searchDir(Path dir, Pattern pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
-	{
-		if (dir == null)
-		{
-			throw new IllegalArgumentException("Missing directory name");
-		}
-		if (!dir.toFile().isDirectory())
-		{
-			throw new IllegalArgumentException(String.format("%s is not a directory", dir));
-		}
-		search(dir, pattern, resultConsumer, RipgrepNativeMapping.LIB::search_dir);
-	}
-
-	public static void search(Path file, Pattern pattern, Consumer<SearchResult> resultConsumer, SearchFunction searchFunction) throws RipgrepException
+	public static void search(Path file, String pattern, Consumer<SearchResult> resultConsumer, SearchFunction searchFunction) throws RipgrepException
 	{
 		if (file == null)
 		{
@@ -55,7 +28,6 @@ public class Ripgrep
 			throw new IllegalArgumentException("Missing search result consumer callback");
 		}
 		String nativeFilename = file.toString();
-		String nativePattern = pattern.toString();
 
 		RipgrepNativeMapping.SearchResultCallback nativeCallback = result -> {
 			try
@@ -71,7 +43,7 @@ public class Ripgrep
 			}
 		};
 
-		final int resultStatusCode = searchFunction.search(nativeFilename, nativePattern, nativeCallback);
+		final int resultStatusCode = searchFunction.search(nativeFilename, pattern, nativeCallback);
 		switch (resultStatusCode)
 		{
 			case RipgrepNativeMapping.ErrorCodes.SUCCESS:
@@ -83,7 +55,7 @@ public class Ripgrep
 			case RipgrepNativeMapping.ErrorCodes.MISSING_CALLBACK:
 				throw new IllegalStateException("Callback, wrapped for use in native code, was missing or could not be called; this should not happen");
 			case RipgrepNativeMapping.ErrorCodes.ERROR_BAD_PATTERN:
-				throw new RipgrepException("Invalid search text \"" + nativePattern + "\". Ripgrep and JavaSE do not implement the same regex library, so Ripgrep may not support all of the same features.");
+				throw new RipgrepException("Invalid search text \"" + pattern + "\". Ripgrep and JavaSE do not implement the same regex library, so Ripgrep may not support all of the same features.");
 			case RipgrepNativeMapping.ErrorCodes.ERROR_COULD_NOT_OPEN_FILE:
 				throw new RipgrepException("Ripgrep could not open or read file \"" + nativeFilename + "\"");
 			case RipgrepNativeMapping.ErrorCodes.ERROR_FROM_RIPGREP:
@@ -94,6 +66,32 @@ public class Ripgrep
 				throw new RipgrepException("An unrecognized status code (" + resultStatusCode + ") was returned by Ripgrep");
 		}
 
+	}
+
+	public void searchFile(Path file, String pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
+	{
+		if (file == null)
+		{
+			throw new IllegalArgumentException("Missing file name");
+		}
+		if (!file.toFile().isFile())
+		{
+			throw new IllegalArgumentException(String.format("%s is not a file", file));
+		}
+		search(file, pattern, resultConsumer, RipgrepNativeMapping.LIB::search_file);
+	}
+
+	public void searchDir(Path dir, String pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
+	{
+		if (dir == null)
+		{
+			throw new IllegalArgumentException("Missing directory name");
+		}
+		if (!dir.toFile().isDirectory())
+		{
+			throw new IllegalArgumentException(String.format("%s is not a directory", dir));
+		}
+		search(dir, pattern, resultConsumer, RipgrepNativeMapping.LIB::search_dir);
 	}
 
 	/**

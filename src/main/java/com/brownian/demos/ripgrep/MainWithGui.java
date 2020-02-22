@@ -9,7 +9,6 @@ import java.awt.Insets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.regex.Pattern;
 
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -94,7 +93,7 @@ public class MainWithGui
 			try
 			{
 				status.setText("Searching...");
-				SwingWorker<Void, Ripgrep.SearchResult> ripgrepWorker = new RipgrepSearchWorker(searchResults, status, dirPathField.getText(), searchTextField.getText());
+				SwingWorker<Void, RipgrepSearcher.SearchResult> ripgrepWorker = new RipgrepSearchWorker(searchResults, status, dirPathField.getText(), searchTextField.getText());
 				ripgrepWorker.execute();
 			}
 			catch (Exception e)
@@ -120,18 +119,18 @@ public class MainWithGui
 		container.add(errorLabel, 0);
 	}
 
-	private static class RipgrepSearchWorker extends SwingWorker<Void, Ripgrep.SearchResult>
+	private static class RipgrepSearchWorker extends SwingWorker<Void, RipgrepSearcher.SearchResult>
 	{
 		private final JPanel searchResults;
 		private final JLabel status;
-		private final Pattern regex;
+		private final String regex;
 		private final Path searchPath;
 
 		public RipgrepSearchWorker(JPanel resultPanel, JLabel status, String dirPath, String searchPattern)
 		{
 			this.searchResults = resultPanel;
 			this.status = status;
-			this.regex = Pattern.compile(searchPattern);
+			this.regex = searchPattern;
 			this.searchPath = Paths.get(dirPath);
 		}
 
@@ -140,7 +139,7 @@ public class MainWithGui
 		{
 			try
 			{
-				Ripgrep.searchDir(searchPath, regex, this::publish);
+				new RipgrepSearcher().searchDir(searchPath, regex, this::publish);
 			}
 			catch (Exception e)
 			{
@@ -149,7 +148,7 @@ public class MainWithGui
 			return null;
 		}
 
-		@Override protected void process(List<Ripgrep.SearchResult> chunks)
+		@Override protected void process(List<RipgrepSearcher.SearchResult> chunks)
 		{
 			status.setText("Processing...");
 			if (chunks != null)

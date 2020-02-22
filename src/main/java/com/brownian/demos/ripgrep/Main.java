@@ -2,15 +2,14 @@ package com.brownian.demos.ripgrep;
 
 import java.nio.file.Paths;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 
 public class Main
 {
 	// TODO: make this an interesting demo, with a GUI!
 
-	public static void main(String[] args) throws Ripgrep.RipgrepException
+	public static void main(String[] args) throws RipgrepSearcher.RipgrepException
 	{
-		Consumer<Ripgrep.SearchResult> callback = result -> {
+		Consumer<RipgrepSearcher.SearchResult> callback = result -> {
 			String line = String.format("%4d: %s", result.getLineNumber(), result.getText());
 			for (char c : line.toCharArray())
 			{
@@ -36,10 +35,10 @@ public class Main
 		search_file("src/main/resources/bee_movie.txt", "[Bb]ee", callback);
 	}
 
-	private static void search_file(String filename, String searchText, Consumer<Ripgrep.SearchResult> callback) throws Ripgrep.RipgrepException
+	private static void search_file(String filename, String searchText, Consumer<RipgrepSearcher.SearchResult> callback) throws RipgrepSearcher.RipgrepException
 	{
 		System.out.printf("Searching for \"%s\" in file \"%s\" using ripgrep from Java...%n", searchText, filename);
 		System.out.flush();
-		Ripgrep.searchFile(Paths.get(filename), Pattern.compile(searchText), callback);
+		new RipgrepSearcher().searchFile(Paths.get(filename), searchText, callback);
 	}
 }

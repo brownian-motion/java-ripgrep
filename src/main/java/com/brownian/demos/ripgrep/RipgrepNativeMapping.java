@@ -6,7 +6,6 @@ import java.util.List;
 import com.sun.jna.Callback;
 import com.sun.jna.Library;
 import com.sun.jna.Native;
-import com.sun.jna.NativeLibrary;
 import com.sun.jna.Pointer;
 import com.sun.jna.Structure;
 
@@ -28,21 +27,21 @@ import com.sun.jna.Structure;
  * To alleviate this burden, this interface is package-protected
  * and wrapped by the {@link RipgrepSearcher} class, which is much more natural to use.
  */
-interface RipgrepNativeMapping extends Library {
+interface RipgrepNativeMapping extends Library
+{
 	String JNA_LIBRARY_NAME = "ripgrep_ffi";
-	NativeLibrary JNA_NATIVE_LIB = NativeLibrary.getInstance(JNA_LIBRARY_NAME);
 
-	RipgrepNativeMapping LIB = Native.loadLibrary(JNA_LIBRARY_NAME, RipgrepNativeMapping.class);
+	RipgrepNativeMapping LIB = Native.load(JNA_LIBRARY_NAME, RipgrepNativeMapping.class);
 
 	int search_file(
-	    String filename,
-	    String search_text, // Rust-style regex
-	    SearchResultCallback callback
+			String filename,
+			String search_text, // Rust-style regex
+			SearchResultCallback callback
 	);
 
 	int search_dir(
-	    String dirname,
-	    String search_text, // Rust-style regex
+			String dirname,
+			String search_text, // Rust-style regex
 	    SearchResultCallback callback
 	);
 

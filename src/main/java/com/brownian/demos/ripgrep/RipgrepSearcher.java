@@ -13,9 +13,9 @@ import java.util.function.Consumer;
  */
 public class RipgrepSearcher
 {
-	public static void search(Path file, String pattern, Consumer<SearchResult> resultConsumer, SearchFunction searchFunction) throws RipgrepException
+	public void search(Path searchPath, String pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
 	{
-		if (file == null)
+		if (searchPath == null)
 		{
 			throw new IllegalArgumentException("Missing file name");
 		}
@@ -27,7 +27,7 @@ public class RipgrepSearcher
 		{
 			throw new IllegalArgumentException("Missing search result consumer callback");
 		}
-		String nativeFilename = file.toString();
+		String nativeFilename = searchPath.toString();
 
 		RipgrepNativeMapping.SearchResultCallback nativeCallback = result -> {
 			try
@@ -43,7 +43,7 @@ public class RipgrepSearcher
 			}
 		};
 
-		final int resultStatusCode = searchFunction.search(nativeFilename, pattern, nativeCallback);
+		final int resultStatusCode = RipgrepNativeMapping.LIB.search_path(nativeFilename, pattern, nativeCallback);
 		switch (resultStatusCode)
 		{
 			case RipgrepNativeMapping.ErrorCodes.SUCCESS:
@@ -66,41 +66,6 @@ public class RipgrepSearcher
 				throw new RipgrepException("An unrecognized status code (" + resultStatusCode + ") was returned by Ripgrep");
 		}
 
-	}
-
-	public void searchFile(Path file, String pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
-	{
-		if (file == null)
-		{
-			throw new IllegalArgumentException("Missing file name");
-		}
-		if (!file.toFile().isFile())
-		{
-			throw new IllegalArgumentException(String.format("%s is not a file", file));
-		}
-		search(file, pattern, resultConsumer, RipgrepNativeMapping.LIB::search_file);
-	}
-
-	public void searchDir(Path dir, String pattern, Consumer<SearchResult> resultConsumer) throws RipgrepException
-	{
-		if (dir == null)
-		{
-			throw new IllegalArgumentException("Missing directory name");
-		}
-		if (!dir.toFile().isDirectory())
-		{
-			throw new IllegalArgumentException(String.format("%s is not a directory", dir));
-		}
-		search(dir, pattern, resultConsumer, RipgrepNativeMapping.LIB::search_dir);
-	}
-
-	/**
-	 * Used to abstract out common parameter-parsing and error handling
-	 * in wrapper code around {@link RipgrepNativeMapping}.
-	 */
-	private interface SearchFunction
-	{
-		int search(String file, String pattern, RipgrepNativeMapping.SearchResultCallback resultConsumer);
 	}
 
 	/**

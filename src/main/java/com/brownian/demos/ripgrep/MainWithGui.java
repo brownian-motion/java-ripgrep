@@ -139,7 +139,7 @@ public class MainWithGui
 		{
 			try
 			{
-				new RipgrepSearcher().searchDir(searchPath, regex, this::publish);
+				new RipgrepSearcher().search(searchPath, regex, this::publish);
 			}
 			catch (Exception e)
 			{

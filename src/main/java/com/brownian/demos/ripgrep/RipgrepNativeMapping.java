@@ -33,18 +33,11 @@ interface RipgrepNativeMapping extends Library
 
 	RipgrepNativeMapping LIB = Native.load(JNA_LIBRARY_NAME, RipgrepNativeMapping.class);
 
-	int search_file(
-			String filename,
+	int search_path(
+			String filepath, // could be dir or file
 			String search_text, // Rust-style regex
 			SearchResultCallback callback
 	);
-
-	int search_dir(
-			String dirname,
-			String search_text, // Rust-style regex
-	    SearchResultCallback callback
-	);
-
 
 	/**
 	 * A callback which receives matches from ripgrep, by-reference.
@@ -55,7 +48,9 @@ interface RipgrepNativeMapping extends Library
 	 *
 	 * @apiNote Because of the care one must take to implement this, it is only used internally within this package.
 	 */
-	interface SearchResultCallback extends Callback {
+	interface SearchResultCallback extends Callback
+	{
+		@SuppressWarnings("unused") // because this is ONLY called from inside native code, Java-side static analysis won't catch its uses
 		boolean callback(SearchResult.ByReference result);
 	}
 

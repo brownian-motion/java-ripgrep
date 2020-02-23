@@ -39,6 +39,6 @@ public class Main
 	{
 		System.out.printf("Searching for \"%s\" in file \"%s\" using ripgrep from Java...%n", searchText, filename);
 		System.out.flush();
-		new RipgrepSearcher().searchFile(Paths.get(filename), searchText, callback);
+		new RipgrepSearcher().search(Paths.get(filename), searchText, callback);
 	}
 }

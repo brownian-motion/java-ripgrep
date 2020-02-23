@@ -22,7 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 	<groupId>com.brownian.demos</groupId>
 	<artifactId>java-ripgrep-ffi</artifactId>
-	<version>1.3-SNAPSHOT</version>
+	<version>1.4-SNAPSHOT</version>
 
 	<name>Ripgrep FFI Demo</name>
 	<description>Demo of using native libraries through Java FFI, featuring ripgrep.</description>
